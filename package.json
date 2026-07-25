@@ -1,0 +1,20 @@
+{
+  "name": "rx-search-and-rescue",
+  "private": true,
+  "packageManager": "pnpm@10.22.0",
+  "scripts": {
+    "dev": "pnpm --filter @rxsr/web dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
+    "db:generate": "pnpm --filter @rxsr/db generate",
+    "db:migrate": "pnpm --filter @rxsr/db migrate",
+    "db:seed": "pnpm --filter @rxsr/db seed",
+    "worker": "pnpm --filter @rxsr/worker dev"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "prettier": "^3.3.3"
+  }
+}

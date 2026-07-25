@@ -1,0 +1,72 @@
+@import "tailwindcss";
+
+/**
+ * Rx Search & Rescue design tokens — from Brand Identity Guidelines v1.
+ * "Deep water, clean paper, one flare": orange is rationed (~5% max of any
+ * screen; exactly one Rescue-orange action per screen). Functional colors are
+ * reserved for coverage meaning and are never decorative.
+ */
+@theme {
+  /* Brand palette */
+  --color-deepwater: #0e1d2f; /* primary ink: app bar, headings, primary buttons */
+  --color-harbor: #16293f; /* hover states, raised surfaces on dark */
+  --color-rescue: #e84e2c; /* THE flare: logo ring, the one key action per screen */
+  --color-rescue-hover: #d64524;
+  --color-fog: #f3f5f7; /* page background, cards, table headers */
+  --color-steel: #5c6b7a; /* secondary text, captions, metadata */
+  --color-mist: #c7cfd6; /* borders, dividers, disabled states */
+
+  /* Functional — coverage has meaning; never decorative */
+  --color-covered: #1f7a4d;
+  --color-covered-soft: #e4f2ea;
+  --color-restricted: #b97a0f;
+  --color-restricted-soft: #f7eedb;
+  --color-notcovered: #c0392b;
+  --color-notcovered-soft: #f9e6e3;
+
+  /* Semantic aliases used by components */
+  --color-background: #ffffff;
+  --color-foreground: #0e1d2f;
+  --color-muted: #f3f5f7;
+  --color-muted-foreground: #5c6b7a;
+  --color-border: #c7cfd6;
+  --color-ring: #16293f;
+
+  /* Typography — three faces, three jobs */
+  --font-display: var(--font-archivo), "Archivo", sans-serif;
+  --font-sans: var(--font-public-sans), "Public Sans", sans-serif;
+  --font-mono: var(--font-plex-mono), "IBM Plex Mono", monospace;
+
+  --radius-card: 0.5rem;
+  --radius-chip: 0.25rem;
+
+  --shadow-card: 0 1px 2px 0 rgb(14 29 47 / 0.06), 0 1px 3px 0 rgb(14 29 47 / 0.1);
+}
+
+@layer base {
+  body {
+    @apply bg-fog text-deepwater font-sans antialiased;
+  }
+
+  h1,
+  h2,
+  h3 {
+    @apply font-display;
+  }
+
+  ::selection {
+    background: var(--color-harbor);
+    color: #fff;
+  }
+}
+
+@layer utilities {
+  /* Mono data chip text: tiers, copays, ZIPs, plan IDs, timestamps */
+  .text-data {
+    @apply font-mono tracking-tight;
+  }
+  /* Eyebrow labels (mono, uppercase, tracked wide) */
+  .text-eyebrow {
+    @apply font-mono text-[11px] uppercase tracking-[0.14em] text-steel;
+  }
+}

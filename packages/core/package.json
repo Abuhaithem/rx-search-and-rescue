@@ -1,0 +1,25 @@
+{
+  "name": "@rxsr/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./analysis": "./src/analysis/index.ts",
+    "./formulary": "./src/formulary/index.ts",
+    "./intake": "./src/intake/index.ts",
+    "./pharmacy": "./src/pharmacy/index.ts",
+    "./report-model": "./src/report-model/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "^3.25.67"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vitest": "^3.1.2"
+  }
+}
