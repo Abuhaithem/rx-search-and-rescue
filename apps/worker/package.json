@@ -15,7 +15,6 @@
     "@google/genai": "^2.13.0",
     "@rxsr/core": "workspace:*",
     "@rxsr/db": "workspace:*",
-    "@supabase/supabase-js": "^2.47.10",
     "bullmq": "^5.34.5",
     "ioredis": "^5.4.2",
     "openai": "^6.49.0",
