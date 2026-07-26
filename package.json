@@ -11,7 +11,11 @@
     "db:generate": "pnpm --filter @rxsr/db generate",
     "db:migrate": "pnpm --filter @rxsr/db migrate",
     "db:seed": "pnpm --filter @rxsr/db seed",
+    "db:seed:demo": "pnpm --filter @rxsr/db seed:demo",
+    "db:wipe:demo": "pnpm --filter @rxsr/db wipe:demo",
     "db:bootstrap": "pnpm --filter @rxsr/db bootstrap",
+    "ingest:formularies": "pnpm --filter @rxsr/worker ingest:formularies",
+    "seed:pharmacies": "pnpm --filter @rxsr/worker seed:pharmacies",
     "worker": "pnpm --filter @rxsr/worker dev"
   },
   "devDependencies": {

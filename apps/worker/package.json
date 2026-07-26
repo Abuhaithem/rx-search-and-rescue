@@ -8,7 +8,9 @@
     "start": "tsx src/index.ts",
     "build": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "ingest:formularies": "tsx src/scripts/ingest-formularies.ts",
+    "seed:pharmacies": "tsx src/scripts/seed-pharmacies.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.54.0",

@@ -28,13 +28,31 @@ Benefits tier costs, pharmacy directories); agents never open a formulary PDF.
 
 ```bash
 pnpm install
-cp .env.example .env        # fill in Supabase + Redis + Anthropic values
+cp .env.example .env        # fill in Supabase + Redis + provider values
 pnpm db:generate            # generate SQL migrations from the schema
 pnpm db:migrate             # apply migrations + RLS to Supabase Postgres
-pnpm db:seed                # dev-only demo data (never in production)
+pnpm db:seed                # reference data: carriers + Idaho ZIP↔county rows
+pnpm db:seed:demo           # OPTIONAL dev-only demo data (never in production)
 ```
 
-Create a Storage bucket named `documents` (private) in Supabase.
+`db:seed` is idempotent and safe on a live database (upserts only). It caches
+the Census ZCTA↔county file under `packages/db/.cache/` so re-runs are
+offline. `db:wipe:demo -- --yes` removes the demo data again (guarded dry-run
+without `--yes`).
+
+Create a Storage bucket named `documents` (private) in Supabase
+(`pnpm db:bootstrap` does this).
+
+Then load real data through the ingestion pipeline (worker must be running):
+
+```bash
+pnpm seed:pharmacies        # enqueue NPPES pharmacy seed for Idaho
+pnpm ingest:formularies     # enqueue every carrier formulary PDF (supports --dry-run)
+```
+
+Formulary entries always flow through the ingestion pipeline (provenance +
+admin QA) — never seeded directly. `plan_pharmacy_networks` comes from carrier
+pharmacy-directory uploads or admin overrides — never seeded.
 
 ## Run
 
