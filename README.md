@@ -40,8 +40,19 @@ Create a Storage bucket named `documents` (private) in Supabase.
 
 ```bash
 pnpm dev        # web app on :3000
-pnpm worker     # ingestion worker (requires Redis + ANTHROPIC_API_KEY)
+pnpm worker     # ingestion worker (requires Redis + the selected provider's API key)
 ```
+
+The worker's PDF extraction is provider-pluggable. Pick with
+`EXTRACTION_PROVIDER` (`anthropic` — default — `openai`, or `gemini`) and set
+that provider's API key (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` /
+`GEMINI_API_KEY`). `EXTRACTION_MODEL` overrides the per-provider default
+(claude-haiku-4-5 / gpt-5-mini / gemini-2.5-flash-lite);
+`EXTRACTION_ESCALATION_MODEL` is the stronger model used to retry formulary
+pages that fail the text-layer cross-check (empty disables escalation). All
+providers pass the same zod validation gate from `@rxsr/core/intake`; see
+`.env.example` for defaults and pricing notes. PHI caveat: only use providers
+with a signed BAA.
 
 ## Develop
 

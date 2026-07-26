@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type Anthropic from "@anthropic-ai/sdk";
-import { createExtractor, type ClaudeMessagesClient } from "./anthropic";
+import {
+  ANTHROPIC_DEFAULT_ESCALATION_MODEL,
+  ANTHROPIC_DEFAULT_MODEL,
+  createAnthropicProvider,
+  type ClaudeMessagesClient,
+} from "./anthropic";
 
 type CreateParams = Anthropic.Messages.MessageCreateParamsNonStreaming;
 
@@ -14,8 +19,7 @@ function fakeClient(toolInputByName: Record<string, unknown>): {
       async create(params) {
         requests.push(params);
         const choice = params.tool_choice;
-        const name =
-          choice && choice.type === "tool" ? choice.name : "unknown_tool";
+        const name = choice && choice.type === "tool" ? choice.name : "unknown_tool";
         const message = {
           content: [{ type: "tool_use", id: "toolu_1", name, input: toolInputByName[name] }],
           stop_reason: "tool_use",
@@ -56,26 +60,58 @@ const validRxc = {
   ],
 };
 
+describe("provider defaults", () => {
+  it("defaults to Haiku with Sonnet escalation and 25-page chunks", () => {
+    const { client } = fakeClient({});
+    const provider = createAnthropicProvider({ client });
+    expect(provider.providerName).toBe("anthropic");
+    expect(provider.model).toBe(ANTHROPIC_DEFAULT_MODEL);
+    expect(provider.model).toBe("claude-haiku-4-5");
+    expect(provider.escalationModel).toBe(ANTHROPIC_DEFAULT_ESCALATION_MODEL);
+    expect(provider.escalationModel).toBe("claude-sonnet-5");
+    expect(provider.maxContextPages).toBe(25);
+  });
+
+  it("honors overrides including disabled escalation", () => {
+    const { client } = fakeClient({});
+    const provider = createAnthropicProvider({
+      client,
+      model: "claude-opus-4-8",
+      escalationModel: null,
+    });
+    expect(provider.model).toBe("claude-opus-4-8");
+    expect(provider.escalationModel).toBeNull();
+  });
+});
+
 describe("extractRxc", () => {
   it("returns the zod-validated extraction from the forced tool call", async () => {
     const { client, requests } = fakeClient({ record_rxc_extraction: validRxc });
-    const extractor = createExtractor({ client });
-    const result = await extractor.extractRxc("cGRm");
+    const provider = createAnthropicProvider({ client });
+    const result = await provider.extractRxc("cGRm");
     expect(result.clientName).toBe("Marilyn Healy");
     expect(result.medications[0]?.prn).toBe(false);
 
     const request = requests[0];
-    expect(request?.model).toBe("claude-opus-4-8");
+    expect(request?.model).toBe("claude-haiku-4-5");
     expect(request?.tool_choice).toEqual({ type: "tool", name: "record_rxc_extraction" });
     const content = request?.messages[0]?.content;
     expect(Array.isArray(content) && content[0]?.type).toBe("document");
+  });
+
+  it("uses the per-call model override", async () => {
+    const { client, requests } = fakeClient({ record_rxc_extraction: validRxc });
+    await createAnthropicProvider({ client }).extractRxc("cGRm", {
+      model: "claude-sonnet-5",
+    });
+    expect(requests[0]?.model).toBe("claude-sonnet-5");
   });
 
   it("rejects payloads that violate the contract", async () => {
     const { client } = fakeClient({
       record_rxc_extraction: { ...validRxc, zip: "not-a-zip" },
     });
-    await expect(createExtractor({ client }).extractRxc("cGRm")).rejects.toThrow();
+    await expect(createAnthropicProvider({ client }).extractRxc("cGRm")).rejects.toThrow();
   });
 
   it("throws when Claude returns no tool call", async () => {
@@ -89,7 +125,7 @@ describe("extractRxc", () => {
         },
       },
     };
-    await expect(createExtractor({ client }).extractRxc("cGRm")).rejects.toThrow(
+    await expect(createAnthropicProvider({ client }).extractRxc("cGRm")).rejects.toThrow(
       /no record_rxc_extraction tool call/,
     );
   });
@@ -110,7 +146,10 @@ describe("extractFormularyPage", () => {
 
   it("caches the shared prompt prefix and the document", async () => {
     const { client, requests } = fakeClient({ record_formulary_page: page });
-    const result = await createExtractor({ client }).extractFormularyPage("cGRm", 42);
+    const result = await createAnthropicProvider({ client }).extractFormularyPage(
+      "cGRm",
+      42,
+    );
     expect(result.rows).toHaveLength(1);
 
     const request = requests[0];
@@ -130,7 +169,10 @@ describe("extractFormularyPage", () => {
     const { client } = fakeClient({
       record_formulary_page: { ...page, page: 7 },
     });
-    const result = await createExtractor({ client }).extractFormularyPage("cGRm", 42);
+    const result = await createAnthropicProvider({ client }).extractFormularyPage(
+      "cGRm",
+      42,
+    );
     expect(result.page).toBe(42);
   });
 
@@ -138,7 +180,7 @@ describe("extractFormularyPage", () => {
     const bad = { page: 1, rows: [{ ...page.rows[0], tier: 9 }] };
     const { client } = fakeClient({ record_formulary_page: bad });
     await expect(
-      createExtractor({ client }).extractFormularyPage("cGRm", 1),
+      createAnthropicProvider({ client }).extractFormularyPage("cGRm", 1),
     ).rejects.toThrow();
   });
 });
@@ -150,7 +192,7 @@ describe("extractFormularyLegend", () => {
         entries: [{ code: "NM", definition: "Not available at mail order" }],
       },
     });
-    const result = await createExtractor({ client }).extractFormularyLegend("cGRm");
+    const result = await createAnthropicProvider({ client }).extractFormularyLegend("cGRm");
     expect(result.entries[0]?.code).toBe("NM");
   });
 });
@@ -169,7 +211,7 @@ describe("extractPharmacyDirectoryRows", () => {
         ],
       },
     });
-    const result = await createExtractor({ client }).extractPharmacyDirectoryRows(
+    const result = await createAnthropicProvider({ client }).extractPharmacyDirectoryRows(
       "--- page 1 ---\nThe Drug Store ...",
     );
     expect(result.rows[0]?.status).toBe("preferred");
@@ -184,7 +226,7 @@ describe("extractPharmacyDirectoryRows", () => {
       },
     });
     await expect(
-      createExtractor({ client }).extractPharmacyDirectoryRows("text"),
+      createAnthropicProvider({ client }).extractPharmacyDirectoryRows("text"),
     ).rejects.toThrow();
   });
 });

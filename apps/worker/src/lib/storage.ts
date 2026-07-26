@@ -1,7 +1,7 @@
 /**
  * Supabase Storage download helper (service-role key — worker only, never the
- * browser). Paths stored in the DB are object paths inside a single uploads
- * bucket (SUPABASE_STORAGE_BUCKET, default "uploads").
+ * browser). Paths stored in the DB are object paths inside the single private
+ * bucket from the README setup (SUPABASE_STORAGE_BUCKET, default "documents").
  */
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
@@ -21,7 +21,7 @@ function requireEnv(name: string): string {
 }
 
 export function createStorage(deps: StorageDeps = {}): StorageDownloader {
-  const bucket = deps.bucket ?? process.env.SUPABASE_STORAGE_BUCKET ?? "uploads";
+  const bucket = deps.bucket ?? process.env.SUPABASE_STORAGE_BUCKET ?? "documents";
   const client =
     deps.client ??
     createClient(

@@ -12,11 +12,14 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.54.0",
+    "@google/genai": "^2.13.0",
     "@rxsr/core": "workspace:*",
     "@rxsr/db": "workspace:*",
     "@supabase/supabase-js": "^2.47.10",
     "bullmq": "^5.34.5",
     "ioredis": "^5.4.2",
+    "openai": "^6.49.0",
+    "pdf-lib": "^1.17.1",
     "unpdf": "^0.12.1",
     "zod": "^3.25.67"
   },

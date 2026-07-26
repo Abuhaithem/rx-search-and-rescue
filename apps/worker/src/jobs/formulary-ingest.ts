@@ -1,8 +1,11 @@
 /**
- * Formulary ingest: per-page Claude vision extraction cross-checked against
- * the PDF text layer, deterministic restriction parsing, multi-strength
- * expansion, RxNorm normalization, and batch insert. Ends at status "qa" —
- * an admin must resolve review rows and activate.
+ * Formulary ingest: per-page vision extraction (provider-pluggable)
+ * cross-checked against the PDF text layer, deterministic restriction
+ * parsing, multi-strength expansion, RxNorm normalization, and batch insert.
+ * Small-context providers receive per-chunk sub-PDFs (lib/pdf-chunk); pages
+ * that fail the cross-check get one retry on the provider's escalation model
+ * before landing in needs_review. Ends at status "qa" — an admin must resolve
+ * review rows and activate.
  */
 import { eq, formularies, formularyEntries, formularyLegends } from "@rxsr/db";
 import { parseRestrictions } from "@rxsr/core/formulary";
@@ -14,6 +17,7 @@ import {
 } from "../lib/cross-check";
 import { markJobDone, markJobFailed, markJobRunning, updateJobProgress } from "../lib/db";
 import { expandStrengths, isBrandName } from "../lib/formulary";
+import { chunkForPage, chunkPdf } from "../lib/pdf-chunk";
 import { createJobDeps, type JobDeps } from "./deps";
 
 const INSERT_BATCH_SIZE = 500;
@@ -27,8 +31,8 @@ export async function runFormularyIngest(
   try {
     await updateJobProgress(db, job.ingestionJobId, { message: "Downloading formulary PDF" });
     const pdfBytes = await deps.storage.download(job.storagePath);
-    const pdfBase64 = Buffer.from(pdfBytes).toString("base64");
     const textLayer = await deps.pdf.extractPageTexts(pdfBytes);
+    const chunks = await chunkPdf(pdfBytes, deps.extractor.maxContextPages);
 
     await db
       .update(formularies)
@@ -45,6 +49,7 @@ export async function runFormularyIngest(
 
     let totalEntries = 0;
     let needsReviewCount = 0;
+    let escalations = 0;
     let pending: (typeof formularyEntries.$inferInsert)[] = [];
 
     const flush = async () => {
@@ -57,14 +62,36 @@ export async function runFormularyIngest(
       await updateJobProgress(db, job.ingestionJobId, {
         page,
         totalPages: textLayer.totalPages,
-        message: `Extracting page ${page} of ${textLayer.totalPages}`,
+        message: `Extracting page ${page} of ${textLayer.totalPages}${
+          escalations > 0 ? ` (${escalations} escalations)` : ""
+        }`,
       });
 
-      const extracted = await deps.extractor.extractFormularyPage(pdfBase64, page);
+      const { chunk, relativePage } = chunkForPage(chunks, page);
+      const pageText = textLayer.pages[page - 1] ?? "";
+
+      let extracted = await deps.extractor.extractFormularyPage(
+        chunk.base64,
+        relativePage,
+      );
+      let check = crossCheckFormularyPage(extracted.rows, pageText);
+
+      // One retry on the escalation model before rows land in needs_review.
+      if (!check.ok && deps.extractor.escalationModel !== null) {
+        escalations += 1;
+        const retried = await deps.extractor.extractFormularyPage(
+          chunk.base64,
+          relativePage,
+          { model: deps.extractor.escalationModel },
+        );
+        const retriedCheck = crossCheckFormularyPage(retried.rows, pageText);
+        if (retriedCheck.ok || retriedCheck.overlapRatio >= check.overlapRatio) {
+          extracted = retried;
+          check = retriedCheck;
+        }
+      }
       if (extracted.rows.length === 0) continue;
 
-      const pageText = textLayer.pages[page - 1] ?? "";
-      const check = crossCheckFormularyPage(extracted.rows, pageText);
       const confidence = check.ok ? OK_CONFIDENCE : MISMATCH_CONFIDENCE;
       const needsReview = !check.ok;
 
@@ -105,7 +132,10 @@ export async function runFormularyIngest(
       totalPages: textLayer.totalPages,
       message: "Extracting abbreviation legend",
     });
-    const legend = await deps.extractor.extractFormularyLegend(pdfBase64);
+    // The legend lives in the front matter — the first chunk always covers it
+    // (and equals the whole document for unchunked providers).
+    const legendSource = chunks[0]?.base64 ?? Buffer.from(pdfBytes).toString("base64");
+    const legend = await deps.extractor.extractFormularyLegend(legendSource);
     if (legend.entries.length > 0) {
       await db.insert(formularyLegends).values(
         legend.entries.map((entry) => ({
@@ -127,7 +157,7 @@ export async function runFormularyIngest(
     await markJobDone(db, job.ingestionJobId, {
       page: textLayer.totalPages,
       totalPages: textLayer.totalPages,
-      message: `Extracted ${totalEntries} entries (${needsReviewCount} need review)`,
+      message: `Extracted ${totalEntries} entries (${needsReviewCount} need review, ${escalations} pages escalated)`,
     });
   } catch (error) {
     await markJobFailed(db, job.ingestionJobId, error);
