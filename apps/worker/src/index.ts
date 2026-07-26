@@ -51,6 +51,20 @@ async function main() {
   for (const w of workers) {
     w.on("failed", (job, err) => {
       console.error(`[${w.name}] job ${job?.id} failed:`, err.message);
+      // Safety net: jobs mark their own ingestion_jobs row failed, but a crash
+      // before markJobRunning (e.g. dependency construction) would otherwise
+      // leave the row stuck in "queued" and the UI polling forever.
+      const ingestionJobId = (job?.data as { ingestionJobId?: string } | undefined)?.ingestionJobId;
+      if (ingestionJobId) {
+        void (async () => {
+          try {
+            const { createWorkerDb, markJobFailed } = await import("./lib/db");
+            await markJobFailed(createWorkerDb(), ingestionJobId, err.message);
+          } catch (updateErr) {
+            console.error(`[${w.name}] could not record failure for ${ingestionJobId}:`, updateErr);
+          }
+        })();
+      }
     });
     w.on("completed", (job) => {
       console.log(`[${w.name}] job ${job.id} completed`);

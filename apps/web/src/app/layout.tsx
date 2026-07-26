@@ -28,7 +28,8 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${archivo.variable} ${publicSans.variable} ${plexMono.variable}`}>
-      <body>{children}</body>
+      {/* suppressHydrationWarning: browser extensions inject attributes into <body> before React hydrates */}
+      <body suppressHydrationWarning>{children}</body>
     </html>
   );
 }

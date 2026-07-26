@@ -22,10 +22,17 @@ export interface JobDeps {
 }
 
 export function createJobDeps(): JobDeps {
+  // Lazy: the deterministic RxC path never touches the LLM, so a missing
+  // provider API key must not fail intake jobs. The provider is constructed
+  // on first access (formulary ingest, pharmacy directory, or LLM fallback).
+  let extractor: ExtractionProvider | undefined;
   return {
     db: createWorkerDb(),
     storage: createStorage(),
-    extractor: getExtractionProvider(),
+    get extractor() {
+      extractor ??= getExtractionProvider();
+      return extractor;
+    },
     rxnorm: createRxNormClient(),
     nppes: createNppesClient(),
     pdf: pdfTextReader,

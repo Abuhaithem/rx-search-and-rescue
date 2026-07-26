@@ -82,6 +82,40 @@ export async function uploadRxc(formData: FormData): Promise<ActionResult<{ clie
   }
 }
 
+/** Re-enqueue extraction for an already-uploaded RxC PDF (after a failed job). */
+export async function retryRxcExtraction(
+  clientId: string,
+): Promise<ActionResult<{ clientId: string }>> {
+  try {
+    const profile = await requireRole();
+    const db = getDb();
+    const client = await db.query.clients.findFirst({ where: eq(clients.id, clientId) });
+    if (!client) return err("Client not found");
+    if (!client.sourceRxcPath) return err("No uploaded RxC PDF to re-process");
+    const storagePath = client.sourceRxcPath;
+
+    const { ingestionJobId } = await enqueueIngestionJob({
+      kind: "rxc",
+      queue: QUEUE_NAMES.rxcIntake,
+      targetId: clientId,
+      payload: (jobId) => ({ ingestionJobId: jobId, clientId, storagePath }),
+    });
+
+    await writeAudit(db, {
+      actorId: profile.id,
+      action: "client.rxc_retry",
+      entityType: "client",
+      entityId: clientId,
+      meta: { storagePath, ingestionJobId },
+    });
+
+    revalidatePath(`/intake/${clientId}`);
+    return ok({ clientId });
+  } catch (e) {
+    return err(errorMessage(e));
+  }
+}
+
 export async function confirmIntake(
   clientId: string,
   payload: ConfirmIntakeInput,

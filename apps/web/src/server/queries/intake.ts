@@ -1,10 +1,11 @@
-import { eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import {
   clientMedications,
   clientPharmacies,
   clients,
   getDb,
   inForcePolicies,
+  ingestionJobs,
   pharmacies,
 } from "@rxsr/db";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
@@ -15,6 +16,12 @@ export type ClientPharmacyRow = typeof clientPharmacies.$inferSelect;
 export type PharmacyRow = typeof pharmacies.$inferSelect;
 export type PolicyRow = typeof inForcePolicies.$inferSelect;
 
+export interface IntakeIngestionStatus {
+  status: string; // queued | running | done | failed
+  error: string | null;
+  updatedAt: Date;
+}
+
 export interface IntakeData {
   client: ClientRow;
   medications: ClientMedicationRow[];
@@ -22,6 +29,8 @@ export interface IntakeData {
   policies: PolicyRow[];
   /** Signed URL for the original RxC PDF; null when not uploaded or unavailable. */
   sourcePdfUrl: string | null;
+  /** Latest RxC extraction job for this client; drives the reading/failed states. */
+  ingestion: IntakeIngestionStatus | null;
 }
 
 export async function getIntake(clientId: string): Promise<IntakeData | null> {
@@ -51,11 +60,23 @@ export async function getIntake(clientId: string): Promise<IntakeData | null> {
     }
   }
 
+  const [latestJob] = await db
+    .select({
+      status: ingestionJobs.status,
+      error: ingestionJobs.error,
+      updatedAt: ingestionJobs.updatedAt,
+    })
+    .from(ingestionJobs)
+    .where(and(eq(ingestionJobs.kind, "rxc"), eq(ingestionJobs.targetId, clientId)))
+    .orderBy(desc(ingestionJobs.createdAt))
+    .limit(1);
+
   return {
     client,
     medications,
     pharmacies: clientPharmacyRows,
     policies,
     sourcePdfUrl,
+    ingestion: latestJob ?? null,
   };
 }

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { Loader2, Plus, TriangleAlert, X } from "lucide-react";
 import type { PolicyType } from "@rxsr/core";
-import { confirmIntake } from "@/server/actions/intake";
+import { confirmIntake, retryRxcExtraction } from "@/server/actions/intake";
 import type { ConfirmIntakeInput } from "@/server/schemas";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -66,6 +66,9 @@ export interface IntakeReviewProps {
   clientId: string;
   sourcePdfUrl: string | null;
   hasSourcePdf: boolean;
+  /** Latest extraction job state: queued | running | done | failed; null = no job. */
+  ingestionStatus: string | null;
+  ingestionError: string | null;
   defaultPlanYear: number;
   client: {
     fullName: string;
@@ -116,13 +119,27 @@ export function IntakeReview(props: IntakeReviewProps) {
     props.medications.map((m) => ({ ...m, key: makeKey() })),
   );
 
-  // Ingestion may still be running: no medications yet but a PDF was uploaded.
-  const reading = props.medications.length === 0 && props.hasSourcePdf;
+  // Ingestion in progress: no medications yet, a PDF exists, and the job
+  // hasn't failed. A failed job renders an error card instead of polling.
+  const extractionFailed = props.ingestionStatus === "failed";
+  const reading = props.medications.length === 0 && props.hasSourcePdf && !extractionFailed;
   useEffect(() => {
     if (!reading) return;
     const timer = setInterval(() => router.refresh(), 3000);
     return () => clearInterval(timer);
   }, [reading, router]);
+
+  const [retrying, startRetry] = useTransition();
+  const handleRetry = () => {
+    startRetry(async () => {
+      const result = await retryRxcExtraction(props.clientId);
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      router.refresh();
+    });
+  };
 
   const drugPlanPolicies = props.policies.filter((p) => p.policyType !== "med_supp");
   const medSuppPolicies = props.policies.filter((p) => p.policyType === "med_supp");
@@ -414,7 +431,20 @@ export function IntakeReview(props: IntakeReviewProps) {
                 Medications {props.hasSourcePdf ? "(read from PDF)" : ""}
               </h2>
 
-              {medications.length === 0 && reading ? (
+              {medications.length === 0 && extractionFailed ? (
+                <div className="space-y-3 rounded-card border border-notcovered/40 bg-notcovered-soft px-4 py-5 text-sm">
+                  <p className="font-semibold text-notcovered">PDF extraction failed</p>
+                  {props.ingestionError ? (
+                    <p className="text-data text-xs text-deepwater/80">{props.ingestionError}</p>
+                  ) : null}
+                  <div className="flex items-center gap-3">
+                    <Button variant="secondary" size="sm" onClick={handleRetry} disabled={retrying}>
+                      {retrying ? "Retrying…" : "Retry extraction"}
+                    </Button>
+                    <span className="text-xs text-steel">or add medication rows manually below.</span>
+                  </div>
+                </div>
+              ) : medications.length === 0 && reading ? (
                 <div className="flex items-center gap-2 rounded-card border border-mist bg-fog px-4 py-6 text-sm text-steel">
                   <Loader2 className="size-4 animate-spin" />
                   Reading PDF… extracted medications will appear here.

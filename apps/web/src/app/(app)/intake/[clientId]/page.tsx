@@ -21,6 +21,8 @@ export default async function IntakeReviewPage({
     clientId,
     sourcePdfUrl: intake.sourcePdfUrl,
     hasSourcePdf: intake.client.sourceRxcPath != null,
+    ingestionStatus: intake.ingestion?.status ?? null,
+    ingestionError: intake.ingestion?.error ?? null,
     defaultPlanYear,
     client: {
       fullName: intake.client.fullName,
