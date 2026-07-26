@@ -3,6 +3,7 @@
  * external AI/data APIs. All AI extraction happens here, at ingestion time —
  * never in the web request path.
  */
+import "@rxsr/db/load-env";
 import { Worker } from "bullmq";
 import IORedis from "ioredis";
 import { QUEUE_NAMES } from "./queues";

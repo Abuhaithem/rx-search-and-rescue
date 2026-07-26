@@ -4,6 +4,7 @@
  * Idempotent: wipes and re-inserts reference + demo data.
  * Never run against a production database.
  */
+import "./load-env";
 import { createDb } from "./client";
 import * as s from "./schema";
 
