@@ -123,6 +123,15 @@ export async function getAvailablePlans(clientId: string, planYear: number): Pro
     );
 }
 
+export interface CatalogTierCost {
+  channel: PharmacyChannel;
+  tier: string;
+  daysSupply: number;
+  copayCents: Cents | null;
+  coinsurancePct: number | null;
+  sourceNote: string | null;
+}
+
 export interface PlanCatalogRow {
   plan: PlanRow;
   carrierName: string;
@@ -131,6 +140,9 @@ export interface PlanCatalogRow {
   tierCostsComplete: boolean;
   tierCostCount: number;
   serviceAreaCount: number;
+  /** Existing rows so the catalog editor prefills instead of starting blank. */
+  tierCosts: CatalogTierCost[];
+  serviceAreas: { state: string; county: string }[];
 }
 
 export async function getPlanCatalog(planYear: number): Promise<PlanCatalogRow[]> {
@@ -150,6 +162,15 @@ export async function getPlanCatalog(planYear: number): Promise<PlanCatalogRow[]
       tierCostsComplete: isTierCostsComplete(tierCosts),
       tierCostCount: tierCosts.length,
       serviceAreaCount: serviceAreas.length,
+      tierCosts: tierCosts.map((tc) => ({
+        channel: tc.channel,
+        tier: tc.tier,
+        daysSupply: tc.daysSupply,
+        copayCents: tc.copayCents,
+        coinsurancePct: tc.coinsurancePct == null ? null : Number(tc.coinsurancePct),
+        sourceNote: tc.sourceNote,
+      })),
+      serviceAreas: serviceAreas.map((a) => ({ state: a.state, county: a.county })),
     };
   });
 }

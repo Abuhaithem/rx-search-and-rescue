@@ -41,6 +41,14 @@ export interface ComparisonPlanMeta {
   pharmacyStatus: NetworkStatus | null;
 }
 
+/** Provenance for a matched formulary entry — powers the grid's popover receipts. */
+export interface EntryProvenance {
+  rawDrugName: string;
+  sourcePage: number;
+  rawRequirementsText: string | null;
+  formularyLabel: string;
+}
+
 export interface ComparisonInputs {
   analysis: AnalysisRow;
   client: ClientRow;
@@ -49,6 +57,8 @@ export interface ComparisonInputs {
   engineMedications: EngineMedication[];
   enginePlans: EnginePlan[];
   pricingPharmacy: PharmacyRow | null;
+  /** Keyed by formulary entry id; lookup via CellResult.matchedEntryId. */
+  entryProvenance: Record<string, EntryProvenance>;
 }
 
 const toEngineMedication = (med: MedicationRow): EngineMedication => ({
@@ -119,7 +129,14 @@ export async function loadComparisonInputs(analysisId: string): Promise<Comparis
     ),
   ];
   const entriesByFormulary = new Map<string, EngineFormularyEntry[]>();
+  const entryProvenance: Record<string, EntryProvenance> = {};
   if (formularyIds.length > 0) {
+    const formularyRows = await db.query.formularies.findMany({
+      where: (f, { inArray: inArr }) => inArr(f.id, formularyIds),
+      columns: { id: true, label: true },
+    });
+    const formularyLabels = new Map(formularyRows.map((f) => [f.id, f.label]));
+
     const entryRows = await db
       .select({
         id: formularyEntries.id,
@@ -134,13 +151,21 @@ export async function loadComparisonInputs(analysisId: string): Promise<Comparis
         qlQuantity: formularyEntries.qlQuantity,
         qlDays: formularyEntries.qlDays,
         extraFlags: formularyEntries.extraFlags,
+        sourcePage: formularyEntries.sourcePage,
+        rawRequirementsText: formularyEntries.rawRequirementsText,
       })
       .from(formularyEntries)
       .where(inArray(formularyEntries.formularyId, formularyIds));
-    for (const { formularyId, ...entry } of entryRows) {
+    for (const { formularyId, sourcePage, rawRequirementsText, ...entry } of entryRows) {
       const list = entriesByFormulary.get(formularyId) ?? [];
       list.push(entry);
       entriesByFormulary.set(formularyId, list);
+      entryProvenance[entry.id] = {
+        rawDrugName: entry.rawDrugName,
+        sourcePage,
+        rawRequirementsText,
+        formularyLabel: formularyLabels.get(formularyId) ?? "formulary",
+      };
     }
   }
 
@@ -185,6 +210,7 @@ export async function loadComparisonInputs(analysisId: string): Promise<Comparis
     engineMedications: medications.map(toEngineMedication),
     enginePlans,
     pricingPharmacy: effectivePharmacy,
+    entryProvenance,
   };
 }
 
@@ -211,6 +237,8 @@ export interface ComparisonData {
   pricingPharmacy: PharmacyRow | null;
   /** Channel override in effect; null = derived per plan from the pharmacy's network status. */
   channel: PharmacyChannel | null;
+  /** Keyed by formulary entry id; lookup via CellResult.matchedEntryId. */
+  entryProvenance: Record<string, EntryProvenance>;
 }
 
 export function zipComparison(
@@ -262,5 +290,6 @@ export async function getComparison(
     grid,
     pricingPharmacy: inputs.pricingPharmacy,
     channel: effectiveOverride,
+    entryProvenance: inputs.entryProvenance,
   };
 }
