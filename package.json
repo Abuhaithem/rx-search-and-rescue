@@ -11,6 +11,7 @@
     "db:generate": "pnpm --filter @rxsr/db generate",
     "db:migrate": "pnpm --filter @rxsr/db migrate",
     "db:seed": "pnpm --filter @rxsr/db seed",
+    "db:bootstrap": "pnpm --filter @rxsr/db bootstrap",
     "worker": "pnpm --filter @rxsr/worker dev"
   },
   "devDependencies": {
