@@ -9,7 +9,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (!profile) redirect("/login");
 
   return (
-    <Shell userName={profile.fullName} organizationName="Insurance Specialists Group">
+    <Shell
+      userName={profile.fullName}
+      organizationName="Insurance Specialists Group"
+      showAdminNav={profile.role !== "agent"}
+    >
       {children}
     </Shell>
   );

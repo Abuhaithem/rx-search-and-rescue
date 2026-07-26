@@ -12,6 +12,8 @@ interface AppShellProps {
   /** e.g. "Insurance Specialists Group" — shown after the user name. */
   organizationName?: string;
   activeNav?: "dashboard" | "admin";
+  /** Admin nav is only rendered for admin/manager roles. */
+  showAdminNav?: boolean;
   children: React.ReactNode;
   className?: string;
 }
@@ -21,7 +23,15 @@ const navItems = [
   { key: "admin", label: "Admin", href: "/admin" },
 ] as const;
 
-function AppShell({ userName, organizationName, activeNav, children, className }: AppShellProps) {
+function AppShell({
+  userName,
+  organizationName,
+  activeNav,
+  showAdminNav = false,
+  children,
+  className,
+}: AppShellProps) {
+  const visibleNavItems = navItems.filter((item) => item.key !== "admin" || showAdminNav);
   return (
     <div className="flex min-h-screen flex-col bg-fog">
       <header className="bg-deepwater text-white">
@@ -33,7 +43,7 @@ function AppShell({ userName, organizationName, activeNav, children, className }
             <LogoLockup />
           </Link>
           <nav aria-label="Primary" className="flex items-center gap-1">
-            {navItems.map((item) => (
+            {visibleNavItems.map((item) => (
               <Link
                 key={item.key}
                 href={item.href}

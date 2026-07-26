@@ -10,7 +10,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   if (profile.role === "agent") redirect("/dashboard");
 
   return (
-    <AppShell userName={profile.fullName} activeNav="admin">
+    <AppShell userName={profile.fullName} activeNav="admin" showAdminNav>
       {children}
       <Toaster />
     </AppShell>
