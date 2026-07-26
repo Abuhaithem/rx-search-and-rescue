@@ -1,0 +1,68 @@
+Marilyn Healy (no group or carrier)
+Preferred Pharmacies
+Do you take prescriptions?
+ZIP Code to Search Pharmacies
+Preferred Pharmacies MAX OF 3
+Delivery Preferred
+Sales
+Yes
+83333
+83333
+Search for pharmacies within 15 miles of the ZIP code.
+The Drug Store - 91 E Croy Hailey ID 83333
+If left blank: We will use the most efficient pharmacy.
+No
+ 
+Current Prescriptions Add Prescription
+Medication Dosage Quantity Refill
+Frequency
+Generic
+OK Updat
+atorvastatin calcium
+atorvastatin
+calcium TAB
+20MG
+60 60 Yes Marily
+10/6/2
+diltiazem hydrochloride er (extended release beads)
+diltiazem
+hydrochloride
+er (extended
+release
+beads) CAP
+240MG/24
+90 90 Yes Marily
+10/6/2
+Eliquis Eliquis TAB
+2.5MG 60 30 Yes Marily
+10/6/2
+losartan potassium
+losartan
+potassium
+TAB 50MG
+60 60 Yes Marily
+10/6/2
+metoprolol succinate er
+metoprolol
+succinate er
+TAB 50MG ER
+90 60 Yes Marily
+10/6/2
+sertraline hcl sertraline hcl
+TAB 100MG 60 60 Yes Marily
+10/6/2CONTACT INFO
+Email: redacted@example.com
+Business:
+Home: (000) 000-0000
+Cell: (000) 000-0000
+IN FORCE POLICIES
+Humana - H94324997 - PDP
+MODA - T02330968 - Med Supp
+RELATIONSHIPS
+No relationships. Create new
+ACTIVITIES (DUE)
+Create new
+No activities due.
+ PINNED NOTE
+No pinned note. Create new
+Marilyn Healy

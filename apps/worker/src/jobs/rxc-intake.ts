@@ -1,7 +1,12 @@
 /**
- * RxC intake: download the uploaded RxC PDF, Claude-extract, RxNorm-normalize
- * medications, resolve preferred pharmacies, classify in-force policies, and
- * land everything unconfirmed (agents flip `confirmed` on the review screen).
+ * RxC intake: download the uploaded RxC PDF, parse it DETERMINISTICALLY from
+ * the text layer (lib/rxc-parse — the RxC layout is consistent, and this
+ * keeps PHI off every LLM vendor), then RxNorm-normalize medications, resolve
+ * preferred pharmacies, classify in-force policies, and land everything
+ * unconfirmed (agents flip `confirmed` on the review screen).
+ * The LLM provider's extractRxc runs ONLY as a fallback when the
+ * deterministic parse fails (layout drift, scanned PDF with no text layer);
+ * its rows are capped at confidence 0.7 so they surface amber in the UI.
  */
 import {
   clientMedications,
@@ -15,6 +20,7 @@ import type { ExtractedPolicy, RxcExtraction } from "@rxsr/core/intake";
 import type { RxcIntakeJob } from "../queues";
 import { markJobDone, markJobFailed, markJobRunning, updateJobProgress } from "../lib/db";
 import { parseDosageText } from "../lib/dosage";
+import { parseRxcText } from "../lib/rxc-parse";
 import {
   ensurePharmacyId,
   loadZipCandidates,
@@ -29,6 +35,48 @@ export function pickCurrentDrugPlanIndex(policies: ExtractedPolicy[]): number {
   return policies.findIndex((p) => p.policyType === "ma_pd");
 }
 
+export type RxcParseMethod = "deterministic" | "llm_fallback";
+
+/** LLM-extracted rows are never trusted above this (amber in the UI). */
+export const LLM_FALLBACK_MAX_CONFIDENCE = 0.7;
+
+export interface RxcResolution {
+  extraction: RxcExtraction;
+  parseMethod: RxcParseMethod;
+}
+
+/**
+ * Deterministic-first: the text-layer parser keeps PHI off LLM vendors.
+ * Any failure (missing anchors, zod gate, no text layer) falls back to the
+ * provider's extractRxc with confidence capped at LLM_FALLBACK_MAX_CONFIDENCE.
+ */
+export async function resolveRxcExtraction(
+  deps: Pick<JobDeps, "pdf" | "extractor">,
+  pdfBytes: Uint8Array,
+): Promise<RxcResolution> {
+  try {
+    const textLayer = await deps.pdf.extractPageTexts(pdfBytes);
+    return {
+      extraction: parseRxcText(textLayer.pages),
+      parseMethod: "deterministic",
+    };
+  } catch {
+    const extraction = await deps.extractor.extractRxc(
+      Buffer.from(pdfBytes).toString("base64"),
+    );
+    return {
+      extraction: {
+        ...extraction,
+        medications: extraction.medications.map((medication) => ({
+          ...medication,
+          confidence: Math.min(medication.confidence, LLM_FALLBACK_MAX_CONFIDENCE),
+        })),
+      },
+      parseMethod: "llm_fallback",
+    };
+  }
+}
+
 export async function runRxcIntake(
   job: RxcIntakeJob,
   deps: JobDeps = createJobDeps(),
@@ -38,12 +86,13 @@ export async function runRxcIntake(
   try {
     await updateJobProgress(db, job.ingestionJobId, { message: "Downloading RxC PDF" });
     const pdfBytes = await deps.storage.download(job.storagePath);
-    const pdfBase64 = Buffer.from(pdfBytes).toString("base64");
 
-    await updateJobProgress(db, job.ingestionJobId, { message: "Extracting with Claude" });
-    const extraction = await deps.extractor.extractRxc(pdfBase64);
+    await updateJobProgress(db, job.ingestionJobId, { message: "Parsing RxC export" });
+    const { extraction, parseMethod } = await resolveRxcExtraction(deps, pdfBytes);
 
-    await updateJobProgress(db, job.ingestionJobId, { message: "Saving client details" });
+    await updateJobProgress(db, job.ingestionJobId, {
+      message: `Saving client details (parse_method=${parseMethod})`,
+    });
     await db
       .update(clients)
       .set({
@@ -60,7 +109,7 @@ export async function runRxcIntake(
     await insertPolicies(deps, job, extraction);
 
     await markJobDone(db, job.ingestionJobId, {
-      message: `Extracted ${extraction.medications.length} medications, ${extraction.preferredPharmacies.length} pharmacies, ${extraction.inForcePolicies.length} policies`,
+      message: `Extracted ${extraction.medications.length} medications, ${extraction.preferredPharmacies.length} pharmacies, ${extraction.inForcePolicies.length} policies (parse_method=${parseMethod})`,
     });
   } catch (error) {
     await markJobFailed(db, job.ingestionJobId, error);
