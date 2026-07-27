@@ -1,11 +1,11 @@
 /**
- * Supabase Storage download helper (service-role key — worker only, never the
+ * Supabase Storage helper (service-role key — worker only, never the
  * browser). Paths stored in the DB are object paths inside the single private
  * bucket from the README setup (SUPABASE_STORAGE_BUCKET, default "documents").
  *
  * Uses the Storage REST API via fetch rather than @supabase/supabase-js: the
  * SDK requires a native WebSocket (Node 22+) for realtime the worker never
- * uses, and file download is a plain authenticated GET.
+ * uses, and object download/upload are plain authenticated requests.
  */
 
 export interface StorageClient {
@@ -13,7 +13,7 @@ export interface StorageClient {
   upload(path: string, bytes: Uint8Array, contentType: string): Promise<void>;
 }
 
-/** @deprecated older name kept for callers typed against download-only use. */
+/** Older name; jobs only need download but receive the full client. */
 export type StorageDownloader = StorageClient;
 
 export interface StorageDeps {

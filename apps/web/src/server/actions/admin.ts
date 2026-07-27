@@ -435,6 +435,51 @@ export async function attachPharmacyDirectory(
   }
 }
 
+const cmsImportSchema = z.object({
+  planYear: z.coerce.number().int().min(2020).max(2100),
+  sourceUrl: z
+    .string()
+    .url()
+    .refine((u) => u.startsWith("https://"), "The CMS download URL must be https"),
+});
+
+/**
+ * Enqueue a CMS Quarterly PDP file import (pharmacy network status + tier-cost
+ * prefill). The worker applies precedence: agent overrides always win, and
+ * existing tier costs are never overwritten.
+ */
+export async function importCmsData(
+  planYear: number,
+  sourceUrl: string,
+): Promise<ActionResult<{ ingestionJobId: string }>> {
+  try {
+    const profile = await requireRole("admin", "manager");
+    const input = cmsImportSchema.parse({ planYear, sourceUrl });
+
+    const { ingestionJobId } = await enqueueIngestionJob({
+      kind: "cms_import",
+      queue: QUEUE_NAMES.cmsImport,
+      payload: (jobId) => ({
+        ingestionJobId: jobId,
+        planYear: input.planYear,
+        sourceUrl: input.sourceUrl,
+      }),
+    });
+
+    await writeAudit(getDb(), {
+      actorId: profile.id,
+      action: "plan.cms_import_enqueued",
+      entityType: "cms_import",
+      meta: { planYear: input.planYear, sourceUrl: input.sourceUrl, ingestionJobId },
+    });
+
+    revalidatePath("/", "layout");
+    return ok({ ingestionJobId });
+  } catch (e) {
+    return err(errorMessage(e));
+  }
+}
+
 export async function setPlanPharmacyStatus(
   planId: string,
   pharmacyId: string,

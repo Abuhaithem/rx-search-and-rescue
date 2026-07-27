@@ -8,11 +8,17 @@ export const QUEUE_NAMES = {
   rxcIntake: "rxc-intake",
   pharmacyDirectory: "pharmacy-directory",
   nppesSeed: "nppes-seed",
+  cmsImport: "cms-import",
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
 
-export type IngestionKind = "formulary" | "rxc" | "pharmacy_directory" | "nppes_seed";
+export type IngestionKind =
+  | "formulary"
+  | "rxc"
+  | "pharmacy_directory"
+  | "nppes_seed"
+  | "cms_import";
 
 // Survive Next.js dev-mode module reloads: one Redis connection + one Queue per name.
 const globalCache = globalThis as unknown as {

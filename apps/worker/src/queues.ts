@@ -8,6 +8,7 @@ export const QUEUE_NAMES = {
   rxcIntake: "rxc-intake",
   pharmacyDirectory: "pharmacy-directory",
   nppesSeed: "nppes-seed",
+  cmsImport: "cms-import",
 } as const;
 
 export interface FormularyIngestJob {
@@ -32,4 +33,11 @@ export interface PharmacyDirectoryJob {
 export interface NppesSeedJob {
   ingestionJobId: string;
   state: string; // e.g. "ID"
+}
+
+export interface CmsImportJob {
+  ingestionJobId: string;
+  planYear: number;
+  /** Download URL of the CMS Quarterly PDP ZIP archive (admin-pasted). */
+  sourceUrl: string;
 }

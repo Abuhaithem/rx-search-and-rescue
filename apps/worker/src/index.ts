@@ -46,6 +46,14 @@ async function main() {
       },
       { connection, concurrency: 1 },
     ),
+    new Worker(
+      QUEUE_NAMES.cmsImport,
+      async (job) => {
+        const { runCmsImport } = await import("./jobs/cms-import");
+        return runCmsImport(job.data);
+      },
+      { connection, concurrency: 1 },
+    ),
   ];
 
   for (const w of workers) {

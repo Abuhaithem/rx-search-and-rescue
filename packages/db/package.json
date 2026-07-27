@@ -12,11 +12,11 @@
     "generate": "drizzle-kit generate",
     "migrate": "tsx src/migrate.ts",
     "seed": "tsx src/seed-reference.ts",
-    "seed:demo": "tsx src/seed-demo.ts",
-    "wipe:demo": "tsx src/wipe-demo.ts",
     "bootstrap": "tsx src/bootstrap.ts",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "seed:demo": "tsx src/seed-demo.ts",
+    "wipe:demo": "tsx src/wipe-demo.ts"
   },
   "dependencies": {
     "drizzle-orm": "^0.44.2",

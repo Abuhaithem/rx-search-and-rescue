@@ -7,8 +7,11 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { getPlanCatalog } from "@/server/queries/plans";
 import { listCarriers } from "../_lib/carriers";
+import { getLatestCmsImport } from "../_lib/cms-import";
 import { searchPharmaciesByZip } from "../_lib/pharmacies";
+import { RefreshPoller } from "../formularies/_components/refresh-poller";
 import { AddPlanDialog } from "./_components/add-plan-dialog";
+import { ImportCmsDialog } from "./_components/import-cms-dialog";
 import { PharmacyNetworkSection } from "./_components/pharmacy-network-section";
 import { PlanEditor } from "./_components/plan-editor";
 
@@ -20,7 +23,11 @@ export default async function PlanCatalogPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const year = Number.parseInt(params.year ?? "", 10) || new Date().getFullYear();
 
-  const [catalog, carrierOptions] = await Promise.all([getPlanCatalog(year), listCarriers()]);
+  const [catalog, carrierOptions, cmsImport] = await Promise.all([
+    getPlanCatalog(year),
+    listCarriers(),
+    getLatestCmsImport(),
+  ]);
   const selected = catalog.find((row) => row.plan.id === params.plan) ?? catalog[0] ?? null;
   const zip = /^\d{5}$/.test(params.pzip ?? "") ? params.pzip! : null;
   const pharmacyResults =
@@ -30,8 +37,20 @@ export default async function PlanCatalogPage({ searchParams }: PageProps) {
     <div className="space-y-8">
       <PageHeader
         title={`Plan Catalog — ${year}`}
-        actions={<AddPlanDialog carriers={carrierOptions} year={year} />}
+        actions={
+          <div className="flex items-center gap-2">
+            <ImportCmsDialog defaultYear={year} />
+            <AddPlanDialog carriers={carrierOptions} year={year} />
+          </div>
+        }
       />
+
+      <RefreshPoller active={cmsImport?.running ?? false} />
+      {cmsImport?.running ? (
+        <p className="text-sm text-steel">
+          CMS import running — {cmsImport.message ?? "starting…"}
+        </p>
+      ) : null}
 
       {catalog.length === 0 ? (
         <EmptyState

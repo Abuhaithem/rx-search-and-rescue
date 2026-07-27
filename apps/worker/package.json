@@ -22,10 +22,14 @@
     "openai": "^6.49.0",
     "pdf-lib": "^1.17.1",
     "unpdf": "^0.12.1",
+    "unzipper": "^0.12.5",
     "zod": "^3.25.67"
   },
   "devDependencies": {
+    "@types/adm-zip": "^0.5.8",
     "@types/node": "^22.20.1",
+    "@types/unzipper": "^0.10.11",
+    "adm-zip": "^0.6.0",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3",
     "vitest": "^3.1.2"
