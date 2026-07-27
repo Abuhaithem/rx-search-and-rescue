@@ -1,0 +1,1 @@
+ALTER TABLE "pharmacies" ADD COLUMN "alt_names" text[] DEFAULT '{}' NOT NULL;

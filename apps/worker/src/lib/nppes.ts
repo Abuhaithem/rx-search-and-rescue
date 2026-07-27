@@ -36,6 +36,15 @@ const nppesResponse = z.object({
         basic: z
           .object({ organization_name: z.string().optional() })
           .optional(),
+        /** DBA / former storefront names — what clients write on RxC forms. */
+        other_names: z
+          .array(
+            z.object({
+              organization_name: z.string().optional(),
+              type: z.string().optional(),
+            }),
+          )
+          .optional(),
         addresses: z
           .array(
             z.object({
@@ -86,10 +95,23 @@ export function createNppesClient(deps: NppesDeps = {}): NppesClient {
         const location =
           result.addresses?.find((a) => a.address_purpose === "LOCATION") ??
           result.addresses?.[0];
+        // Legal name stays `name`; DBAs land in altNames (deduped, and never
+        // repeating the legal name, case-insensitively).
+        const seenNames = new Set([name.trim().toUpperCase()]);
+        const altNames: string[] = [];
+        for (const other of result.other_names ?? []) {
+          const alt = other.organization_name?.trim();
+          if (!alt) continue;
+          const key = alt.toUpperCase();
+          if (seenNames.has(key)) continue;
+          seenNames.add(key);
+          altNames.push(alt);
+        }
         candidates.push({
           id: npi, // not yet imported: id carries the NPI per the contract
           npi,
           name,
+          altNames,
           address1: location?.address_1 ?? null,
           city: location?.city ?? null,
           state: location?.state ?? null,

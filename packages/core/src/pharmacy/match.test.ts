@@ -73,6 +73,49 @@ describe("scorePharmacyCandidate", () => {
   });
 });
 
+describe("alt names (DBA / storefront)", () => {
+  // Real NPPES case: NPI 1285643353 is legally "ATKINSONS MARKET, INC" with
+  // other_names DBA "THE DRUGSTORE"; the Healy RxC form says "The Drug Store".
+  const atkinsons = candidate({
+    id: "atkinsons",
+    npi: "1285643353",
+    name: "ATKINSONS MARKET, INC",
+    altNames: ["THE DRUGSTORE"],
+    address1: "91 E CROY ST",
+    zip: "83333",
+  });
+
+  it("scores against the best of legal name and DBAs (confident match)", () => {
+    const score = scorePharmacyCandidate(drugStore, atkinsons);
+    expect(score).toBeGreaterThanOrEqual(PHARMACY_CONFIRM_THRESHOLD);
+  });
+
+  it("without the DBA the legal name alone stays below the threshold", () => {
+    const legalOnly = { ...atkinsons, altNames: [] };
+    expect(scorePharmacyCandidate(drugStore, legalOnly)).toBeLessThan(
+      PHARMACY_CONFIRM_THRESHOLD,
+    );
+  });
+
+  it("a worse alt name never lowers the score", () => {
+    const withNoise = candidate({
+      id: "v",
+      name: "The Drug Store",
+      altNames: ["TOTALLY UNRELATED LLC"],
+      zip: "83333",
+    });
+    expect(scorePharmacyCandidate(drugStore, withNoise)).toBeCloseTo(0.85, 5);
+  });
+
+  it("ranks the DBA match above unrelated same-zip candidates", () => {
+    const matches = matchPharmacy(drugStore, [
+      candidate({ id: "other", name: "Hailey Health Mart", zip: "83333" }),
+      atkinsons,
+    ]);
+    expect(matches[0]?.candidate.id).toBe("atkinsons");
+  });
+});
+
 describe("matchPharmacy", () => {
   it("sorts matches by score descending", () => {
     const matches = matchPharmacy(drugStore, [

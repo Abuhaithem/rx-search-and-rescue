@@ -256,6 +256,8 @@ export const pharmacies = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     npi: text("npi").unique(),
     name: text("name").notNull(),
+    /** DBA / storefront names from NPPES other_names — clients write these on RxC forms. */
+    altNames: text("alt_names").array().notNull().default([]),
     address1: text("address1"),
     city: text("city"),
     state: text("state"),

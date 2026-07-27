@@ -17,7 +17,10 @@ export interface ParsedPharmacyText {
 export interface PharmacyCandidate {
   id: string; // pharmacies.id (or NPPES NPI for not-yet-imported)
   npi: string | null;
+  /** Legal organization name from NPPES. */
   name: string;
+  /** DBA / storefront names (NPPES other_names) — what clients actually write. */
+  altNames?: string[];
   address1: string | null;
   city: string | null;
   state: string | null;

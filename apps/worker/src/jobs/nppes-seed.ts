@@ -37,6 +37,7 @@ export async function runNppesSeed(
           .values({
             npi: candidate.npi,
             name: candidate.name,
+            altNames: candidate.altNames ?? [],
             address1: candidate.address1,
             city: candidate.city,
             state: candidate.state,
@@ -47,6 +48,7 @@ export async function runNppesSeed(
             target: pharmacies.npi,
             set: {
               name: candidate.name,
+              altNames: candidate.altNames ?? [],
               address1: candidate.address1,
               city: candidate.city,
               state: candidate.state,

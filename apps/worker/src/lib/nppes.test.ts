@@ -7,7 +7,13 @@ const sampleResponse = {
   results: [
     {
       number: 1234567890,
-      basic: { organization_name: "THE DRUG STORE INC" },
+      basic: { organization_name: "ATKINSONS MARKET, INC" },
+      other_names: [
+        { organization_name: "THE DRUGSTORE", type: "Doing Business As" },
+        { organization_name: "The Drugstore", type: "Former Name" }, // case-insensitive dupe
+        { organization_name: "ATKINSONS MARKET, INC", type: "Other" }, // = legal name
+        { type: "Doing Business As" }, // missing name
+      ],
       addresses: [
         {
           address_purpose: "MAILING",
@@ -54,7 +60,8 @@ describe("searchPharmacies", () => {
       {
         id: "1234567890",
         npi: "1234567890",
-        name: "THE DRUG STORE INC",
+        name: "ATKINSONS MARKET, INC",
+        altNames: ["THE DRUGSTORE"],
         address1: "91 E CROY ST",
         city: "HAILEY",
         state: "ID",

@@ -12,6 +12,7 @@ export const candidateFromPharmacyRow = (row: PharmacyRow): PharmacyCandidate =>
   id: row.id,
   npi: row.npi,
   name: row.name,
+  altNames: row.altNames,
   address1: row.address1,
   city: row.city,
   state: row.state,
@@ -53,6 +54,7 @@ export async function ensurePharmacyId(
     .values({
       npi: candidate.npi,
       name: candidate.name,
+      altNames: candidate.altNames ?? [],
       address1: candidate.address1,
       city: candidate.city,
       state: candidate.state,
@@ -63,6 +65,7 @@ export async function ensurePharmacyId(
       target: pharmacies.npi,
       set: {
         name: candidate.name,
+        altNames: candidate.altNames ?? [],
         address1: candidate.address1,
         city: candidate.city,
         state: candidate.state,

@@ -31,7 +31,6 @@ const NOISE_WORDS = new Set([
   "and",
   "pharmacy",
   "pharmacies",
-  "drugstore",
   "rx",
 ]);
 
@@ -44,11 +43,11 @@ const normalizeTokens = (s: string): string[] =>
     .split(" ")
     .filter(Boolean);
 
-/** Identity tokens: noise words and bare store numbers removed. */
-const coreTokens = (s: string): Set<string> =>
-  new Set(
-    normalizeTokens(s).filter((t) => !NOISE_WORDS.has(t) && !/^\d+$/.test(t)),
-  );
+/** Identity tokens (ordered): noise words and bare store numbers removed. */
+const orderedCoreTokens = (s: string): string[] =>
+  normalizeTokens(s).filter((t) => !NOISE_WORDS.has(t) && !/^\d+$/.test(t));
+
+const coreTokens = (s: string): Set<string> => new Set(orderedCoreTokens(s));
 
 function jaccard(a: Set<string>, b: Set<string>): number {
   if (a.size === 0 || b.size === 0) return 0;
@@ -59,6 +58,12 @@ function jaccard(a: Set<string>, b: Set<string>): number {
 }
 
 export function nameSimilarity(a: string, b: string): number {
+  // Compound-word equivalence: "The Drug Store" ≡ "THE DRUGSTORE" — compare
+  // the space-squashed identity tokens before any token-set math.
+  const squashA = orderedCoreTokens(a).join("");
+  const squashB = orderedCoreTokens(b).join("");
+  if (squashA !== "" && squashA === squashB) return 1;
+
   const coreA = coreTokens(a);
   const coreB = coreTokens(b);
   if (coreA.size > 0 && coreB.size > 0) return jaccard(coreA, coreB);
@@ -83,7 +88,12 @@ export function scorePharmacyCandidate(
   parsed: ParsedPharmacyText,
   candidate: PharmacyCandidate,
 ): number {
-  const name = nameSimilarity(parsed.name, candidate.name);
+  // Clients write the storefront (DBA) name, not the legal one — score
+  // against every known name and keep the best.
+  const candidateNames = [candidate.name, ...(candidate.altNames ?? [])];
+  const name = Math.max(
+    ...candidateNames.map((n) => nameSimilarity(parsed.name, n)),
+  );
 
   const parsedZip = zip5(parsed.zip);
   const candidateZip = zip5(candidate.zip);
