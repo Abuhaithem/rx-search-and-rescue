@@ -2,8 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
+import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/components/ui/sonner";
 import { signIn } from "@/server/actions/auth";
@@ -35,6 +37,7 @@ export function LoginForm() {
           id="login-email"
           type="email"
           autoComplete="email"
+          autoFocus
           required
           value={email}
           onChange={(event) => setEmail(event.target.value)}
@@ -42,9 +45,8 @@ export function LoginForm() {
       </div>
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="login-password">Password</Label>
-        <Input
+        <PasswordInput
           id="login-password"
-          type="password"
           autoComplete="current-password"
           required
           value={password}
@@ -53,7 +55,14 @@ export function LoginForm() {
       </div>
       {/* Signing in doesn't complete the job — deepwater primary, never rescue. */}
       <Button type="submit" disabled={isPending} className="mt-1 w-full">
-        {isPending ? "Signing in…" : "Sign in"}
+        {isPending ? (
+          <>
+            <Loader2 className="animate-spin" />
+            Signing in…
+          </>
+        ) : (
+          "Sign in"
+        )}
       </Button>
     </form>
   );

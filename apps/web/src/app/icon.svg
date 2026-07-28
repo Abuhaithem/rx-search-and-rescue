@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <rect width="48" height="48" rx="11" fill="#0e1d2f"/>
+  <circle cx="24" cy="24" r="15" fill="none" stroke="#e84e2c" stroke-width="5.5"
+          stroke-dasharray="15.708 7.854" stroke-dashoffset="7.854"/>
+  <text x="24" y="25" text-anchor="middle" dominant-baseline="central"
+        font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="15" fill="#ffffff">Rx</text>
+</svg>

@@ -26,6 +26,12 @@ export default function LoginPage() {
 
       <Card className="w-full max-w-sm">
         <CardContent className="p-6">
+          <div className="mb-5 space-y-1">
+            <h1 className="font-display text-lg font-bold text-deepwater">Sign in</h1>
+            <p className="text-sm text-steel">
+              Authorized agents only. Handles protected health information — access is logged.
+            </p>
+          </div>
           <LoginForm />
         </CardContent>
       </Card>
