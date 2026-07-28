@@ -3,7 +3,27 @@
  * @rxsr/db/schema — if you change one, change both.
  */
 
-export type PharmacyChannel = "preferred_retail" | "standard_retail" | "mail_order";
+export type PharmacyChannel =
+  | "preferred_retail"
+  | "standard_retail"
+  | "preferred_mail"
+  | "standard_mail";
+
+/** Human-readable channel names for UI + client report. */
+export const CHANNEL_LABELS: Record<PharmacyChannel, string> = {
+  preferred_retail: "Preferred Retail",
+  standard_retail: "Standard Retail",
+  preferred_mail: "Preferred Mail",
+  standard_mail: "Standard Mail",
+};
+
+/** Retail channels price 30-day supply; mail channels price 90-day. */
+export const RETAIL_CHANNELS: readonly PharmacyChannel[] = ["preferred_retail", "standard_retail"];
+export const MAIL_CHANNELS: readonly PharmacyChannel[] = ["preferred_mail", "standard_mail"];
+export const isMailChannel = (c: PharmacyChannel): boolean =>
+  c === "preferred_mail" || c === "standard_mail";
+export const isPreferredChannel = (c: PharmacyChannel): boolean =>
+  c === "preferred_retail" || c === "preferred_mail";
 export type NetworkStatus = "preferred" | "standard" | "out_of_network";
 export type CostTier = "t1" | "t2" | "t3" | "t4" | "t5" | "t6" | "insulin";
 export type CoverageStatus =

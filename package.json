@@ -13,6 +13,7 @@
     "db:migrate": "pnpm --filter @rxsr/db migrate",
     "db:seed": "pnpm --filter @rxsr/db seed",
     "db:seed:demo": "pnpm --filter @rxsr/db seed:demo",
+    "db:seed:testing": "pnpm --filter @rxsr/db seed:testing",
     "db:wipe:demo": "pnpm --filter @rxsr/db wipe:demo",
     "db:bootstrap": "pnpm --filter @rxsr/db bootstrap",
     "ingest:formularies": "pnpm --filter @rxsr/worker ingest:formularies",

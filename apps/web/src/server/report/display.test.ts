@@ -88,29 +88,44 @@ const tc = (
   tier: BenefitTierCost["tier"],
   copayCents: number | null,
   coinsurancePct: number | null = null,
-  daysSupply = channel === "mail_order" ? 90 : 30,
+  daysSupply = channel === "standard_mail" || channel === "preferred_mail" ? 90 : 30,
 ): BenefitTierCost => ({ channel, tier, daysSupply, copayCents, coinsurancePct });
 
 describe("buildChannelColumns", () => {
   it("both retail networks → Standard + Preferred headers", () => {
-    const { channels, headers } = buildChannelColumns(
-      [tc("standard_retail", "t1", 100), tc("preferred_retail", "t1", 0)],
-      false,
-    );
+    const { channels, headers } = buildChannelColumns([
+      tc("standard_retail", "t1", 100),
+      tc("preferred_retail", "t1", 0),
+    ]);
     expect(channels).toEqual(["standard_retail", "preferred_retail"]);
     expect(headers).toEqual(["30 DAY Standard", "30 Day Preferred"]);
   });
 
   it("single retail network → In Network header", () => {
-    const { headers } = buildChannelColumns([tc("standard_retail", "t1", 0)], false);
+    const { headers } = buildChannelColumns([tc("standard_retail", "t1", 0)]);
     expect(headers).toEqual(["30 DAY In Network"]);
   });
 
-  it("mail order only appears when the analysis priced with it", () => {
-    const costs = [tc("standard_retail", "t1", 0), tc("mail_order", "t1", 0)];
-    expect(buildChannelColumns(costs, false).channels).toEqual(["standard_retail"]);
-    expect(buildChannelColumns(costs, true).channels).toEqual(["standard_retail", "mail_order"]);
-    expect(buildChannelColumns(costs, true).headers[1]).toBe("90 DAY Mail Order");
+  it("every published channel gets a column, retail before mail", () => {
+    const costs = [
+      tc("preferred_mail", "t1", 0),
+      tc("standard_retail", "t1", 0),
+      tc("standard_mail", "t1", 0),
+      tc("preferred_retail", "t1", 0),
+    ];
+    const { channels, headers } = buildChannelColumns(costs);
+    expect(channels).toEqual([
+      "standard_retail",
+      "preferred_retail",
+      "standard_mail",
+      "preferred_mail",
+    ]);
+    expect(headers).toEqual([
+      "30 DAY Standard",
+      "30 Day Preferred",
+      "90 DAY Standard Mail",
+      "90 DAY Preferred Mail",
+    ]);
   });
 });
 
@@ -121,7 +136,6 @@ describe("buildPlanBenefits", () => {
       carrierName: "Blue Cross of Idaho",
       premiumCents: 0,
       rxDeductibleCents: 34000,
-      includeMailOrder: false,
       tierCosts: [
         tc("standard_retail", "t1", 100),
         tc("preferred_retail", "t1", 0),

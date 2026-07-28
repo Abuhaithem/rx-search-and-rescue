@@ -27,7 +27,8 @@ export const formularyStatus = pgEnum("formulary_status", [
 export const pharmacyChannel = pgEnum("pharmacy_channel", [
   "preferred_retail",
   "standard_retail",
-  "mail_order",
+  "preferred_mail",
+  "standard_mail",
 ]);
 
 export const networkStatus = pgEnum("network_status", [
@@ -373,9 +374,8 @@ export const analyses = pgTable(
       .references(() => clients.id, { onDelete: "cascade" }),
     planYear: integer("plan_year").notNull(),
     status: analysisStatus("status").notNull().default("new"),
-    /** Pricing context chosen on the grid. */
-    pricingPharmacyId: uuid("pricing_pharmacy_id").references(() => pharmacies.id),
-    pricingChannelOverride: pharmacyChannel("pricing_channel_override"), // null = client's pharmacy
+    /** Add the plan's mail-order channel as a comparison row in the cost matrix. */
+    includeMailOrder: boolean("include_mail_order").notNull().default(false),
     assignedTo: uuid("assigned_to").references(() => profiles.id),
     approvedBy: uuid("approved_by").references(() => profiles.id),
     approvedAt: timestamp("approved_at", { withTimezone: true }),
@@ -400,6 +400,27 @@ export const analysisPlans = pgTable(
     isCurrent: boolean("is_current").notNull().default(false),
   },
   (t) => [uniqueIndex("analysis_plans_uq").on(t.analysisId, t.planId)],
+);
+
+/**
+ * Pharmacies priced in this analysis — the rows of the cost matrix. Each is
+ * priced per plan at the channel resolved from plan_pharmacy_networks (the
+ * client's real pharmacies). The plan's mail-order channel is added separately
+ * via analyses.includeMailOrder.
+ */
+export const analysisPharmacies = pgTable(
+  "analysis_pharmacies",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    analysisId: uuid("analysis_id")
+      .notNull()
+      .references(() => analyses.id, { onDelete: "cascade" }),
+    pharmacyId: uuid("pharmacy_id")
+      .notNull()
+      .references(() => pharmacies.id, { onDelete: "cascade" }),
+    position: integer("position").notNull().default(0),
+  },
+  (t) => [uniqueIndex("analysis_pharmacies_uq").on(t.analysisId, t.pharmacyId)],
 );
 
 /** One row per medication × plan — the comparison grid cell, with provenance. */
@@ -526,6 +547,7 @@ export const planTierCostsRelations = relations(planTierCosts, ({ one }) => ({
 
 export const pharmaciesRelations = relations(pharmacies, ({ many }) => ({
   planNetworks: many(planPharmacyNetworks),
+  analysisPharmacies: many(analysisPharmacies),
 }));
 
 export const planPharmacyNetworksRelations = relations(planPharmacyNetworks, ({ one }) => ({
@@ -560,10 +582,15 @@ export const inForcePoliciesRelations = relations(inForcePolicies, ({ one }) => 
 export const analysesRelations = relations(analyses, ({ one, many }) => ({
   client: one(clients, { fields: [analyses.clientId], references: [clients.id] }),
   plans: many(analysisPlans),
+  pharmacies: many(analysisPharmacies),
   results: many(analysisResults),
   overrides: many(reportOverrides),
-  pricingPharmacy: one(pharmacies, {
-    fields: [analyses.pricingPharmacyId],
+}));
+
+export const analysisPharmaciesRelations = relations(analysisPharmacies, ({ one }) => ({
+  analysis: one(analyses, { fields: [analysisPharmacies.analysisId], references: [analyses.id] }),
+  pharmacy: one(pharmacies, {
+    fields: [analysisPharmacies.pharmacyId],
     references: [pharmacies.id],
   }),
 }));

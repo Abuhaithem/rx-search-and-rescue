@@ -5,13 +5,13 @@ import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import {
   analyses,
+  analysisPharmacies,
   analysisPlans,
   analysisResults,
   getDb,
   plans,
   reportOverrides,
 } from "@rxsr/db";
-import type { PharmacyChannel } from "@rxsr/core";
 import { runAnalysis, type CellResult } from "@rxsr/core/analysis";
 import { generateReportDocx } from "@rxsr/report";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
@@ -21,7 +21,7 @@ import { writeAudit } from "../audit";
 import { loadComparisonInputs } from "../queries/comparison";
 import { getCurrentDrugPlanId, isTierCostsComplete } from "../queries/plans";
 import { buildReportModel } from "../report/build-model";
-import { overridePathSchema, pharmacyChannelSchema } from "../schemas";
+import { overridePathSchema } from "../schemas";
 
 const uuidSchema = z.string().uuid();
 
@@ -122,11 +122,7 @@ export async function runComparison(
     if (inputs.enginePlans.length === 0) return err("Select plans before running the comparison");
     if (inputs.engineMedications.length === 0) return err("The client has no medications to compare");
 
-    const output = runAnalysis(
-      inputs.engineMedications,
-      inputs.enginePlans,
-      inputs.analysis.pricingChannelOverride,
-    );
+    const output = runAnalysis(inputs.engineMedications, inputs.enginePlans);
 
     const db = getDb();
     await db.transaction(async (tx) => {
@@ -172,30 +168,83 @@ export async function runComparison(
   }
 }
 
-export async function setPricingChannel(
+/** Toggle the plan's mail-order channel as a row in the cost matrix. */
+export async function setIncludeMailOrder(
   analysisId: string,
-  channelOverride: PharmacyChannel | null,
+  include: boolean,
 ): Promise<ActionResult<{ analysisId: string }>> {
   try {
     const profile = await requireRole();
     const input = z
-      .object({ analysisId: uuidSchema, channelOverride: pharmacyChannelSchema.nullable() })
-      .parse({ analysisId, channelOverride });
+      .object({ analysisId: uuidSchema, include: z.boolean() })
+      .parse({ analysisId, include });
 
     const db = getDb();
     const [updated] = await db
       .update(analyses)
-      .set({ pricingChannelOverride: input.channelOverride, updatedAt: new Date() })
+      .set({ includeMailOrder: input.include, updatedAt: new Date() })
       .where(eq(analyses.id, input.analysisId))
       .returning({ id: analyses.id });
     if (!updated) return err("Analysis not found");
 
     await writeAudit(db, {
       actorId: profile.id,
-      action: "analysis.pricing_channel_set",
+      action: "analysis.mail_order_toggled",
       entityType: "analysis",
       entityId: input.analysisId,
-      meta: { channelOverride: input.channelOverride },
+      meta: { include: input.include },
+    });
+
+    revalidatePath("/", "layout");
+    return ok({ analysisId: input.analysisId });
+  } catch (e) {
+    return err(errorMessage(e));
+  }
+}
+
+/** Set which pharmacies are priced (the rows of the cost matrix), in order. */
+export async function setComparisonPharmacies(
+  analysisId: string,
+  pharmacyIds: string[],
+): Promise<ActionResult<{ analysisId: string }>> {
+  try {
+    const profile = await requireRole();
+    const input = z
+      .object({ analysisId: uuidSchema, pharmacyIds: z.array(uuidSchema).max(6) })
+      .parse({ analysisId, pharmacyIds });
+
+    const db = getDb();
+    const analysis = await db.query.analyses.findFirst({ where: eq(analyses.id, input.analysisId) });
+    if (!analysis) return err("Analysis not found");
+    if (analysis.status === "approved" || analysis.status === "delivered") {
+      return err("Pharmacies cannot change after approval");
+    }
+
+    // Dedupe while preserving order.
+    const ordered = [...new Set(input.pharmacyIds)];
+
+    await db.transaction(async (tx) => {
+      await tx.delete(analysisPharmacies).where(eq(analysisPharmacies.analysisId, input.analysisId));
+      if (ordered.length > 0) {
+        await tx.insert(analysisPharmacies).values(
+          ordered.map((pharmacyId, position) => ({
+            analysisId: input.analysisId,
+            pharmacyId,
+            position,
+          })),
+        );
+      }
+      await tx
+        .update(analyses)
+        .set({ updatedAt: new Date() })
+        .where(eq(analyses.id, input.analysisId));
+      await writeAudit(tx, {
+        actorId: profile.id,
+        action: "analysis.pharmacies_set",
+        entityType: "analysis",
+        entityId: input.analysisId,
+        meta: { pharmacyIds: ordered },
+      });
     });
 
     revalidatePath("/", "layout");

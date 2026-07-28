@@ -70,41 +70,38 @@ export interface BenefitTierCost {
 
 const TIER_ORDER: CostTier[] = ["t1", "t2", "t3", "t4", "t5", "t6", "insulin"];
 
+/** Column order + header wording for a plan's benefit table, per channel. */
+const CHANNEL_COLUMN: Record<PharmacyChannel, { order: number; header: string; days: number }> = {
+  standard_retail: { order: 0, header: "DAY Standard", days: 30 },
+  preferred_retail: { order: 1, header: "Day Preferred", days: 30 },
+  standard_mail: { order: 2, header: "DAY Standard Mail", days: 90 },
+  preferred_mail: { order: 3, header: "DAY Preferred Mail", days: 90 },
+};
+
 /**
- * Channel columns for a plan's benefit table. Both retail networks priced →
- * "30 DAY Standard" + "30 Day Preferred" (casing per the sample reports);
- * one retail network → "30 DAY In Network"; mail order appears only when the
- * analysis actually priced with it.
+ * Channel columns for a plan's benefit table — one per channel the plan
+ * actually publishes, in a stable order (retail before mail, standard before
+ * preferred). A lone retail network reads "30 DAY In Network".
  */
 export function buildChannelColumns(
   tierCosts: BenefitTierCost[],
-  includeMailOrder: boolean,
 ): { channels: PharmacyChannel[]; headers: string[] } {
   const present = new Set(tierCosts.map((c) => c.channel));
-  const daysFor = (channel: PharmacyChannel, fallback: number): number =>
-    tierCosts.find((c) => c.channel === channel)?.daysSupply ?? fallback;
+  const daysFor = (channel: PharmacyChannel): number =>
+    tierCosts.find((c) => c.channel === channel)?.daysSupply ?? CHANNEL_COLUMN[channel].days;
 
-  const channels: PharmacyChannel[] = [];
-  const headers: string[] = [];
+  const channels = [...present].sort((a, b) => CHANNEL_COLUMN[a].order - CHANNEL_COLUMN[b].order);
 
-  const hasStandard = present.has("standard_retail");
-  const hasPreferred = present.has("preferred_retail");
-  if (hasStandard && hasPreferred) {
-    channels.push("standard_retail", "preferred_retail");
-    headers.push(
-      `${daysFor("standard_retail", 30)} DAY Standard`,
-      `${daysFor("preferred_retail", 30)} Day Preferred`,
-    );
-  } else if (hasStandard || hasPreferred) {
-    const channel: PharmacyChannel = hasStandard ? "standard_retail" : "preferred_retail";
-    channels.push(channel);
-    headers.push(`${daysFor(channel, 30)} DAY In Network`);
-  }
+  // Single retail network with no mail → the sample reports label it "In Network".
+  const soleRetail =
+    channels.length === 1 &&
+    (channels[0] === "standard_retail" || channels[0] === "preferred_retail");
 
-  if (includeMailOrder && present.has("mail_order")) {
-    channels.push("mail_order");
-    headers.push(`${daysFor("mail_order", 90)} DAY Mail Order`);
-  }
+  const headers = channels.map((channel) =>
+    soleRetail
+      ? `${daysFor(channel)} DAY In Network`
+      : `${daysFor(channel)} ${CHANNEL_COLUMN[channel].header}`,
+  );
 
   return { channels, headers };
 }
@@ -138,9 +135,8 @@ export function buildPlanBenefits(input: {
   premiumCents: Cents | null;
   rxDeductibleCents: Cents | null;
   tierCosts: BenefitTierCost[];
-  includeMailOrder: boolean;
 }): ReportPlanBenefits {
-  const { channels, headers } = buildChannelColumns(input.tierCosts, input.includeMailOrder);
+  const { channels, headers } = buildChannelColumns(input.tierCosts);
   return {
     planName: input.planName,
     carrierName: input.carrierName,

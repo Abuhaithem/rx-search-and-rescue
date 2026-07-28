@@ -74,7 +74,8 @@ export type ManualClientInput = z.input<typeof manualClientSchema>;
 export const pharmacyChannelSchema = z.enum([
   "preferred_retail",
   "standard_retail",
-  "mail_order",
+  "preferred_mail",
+  "standard_mail",
 ]);
 
 export const networkStatusSchema = z.enum(["preferred", "standard", "out_of_network"]);

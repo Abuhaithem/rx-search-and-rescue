@@ -79,7 +79,7 @@ describe("scanCmsZip", () => {
     expect(result.costs.rows[0]?.channels).toEqual([
       { channel: "preferred_retail", daysSupply: 30, copayCents: 1000, coinsurancePct: null },
       { channel: "standard_retail", daysSupply: 30, copayCents: 1500, coinsurancePct: null },
-      { channel: "mail_order", daysSupply: 30, copayCents: 0, coinsurancePct: null },
+      { channel: "preferred_mail", daysSupply: 30, copayCents: 0, coinsurancePct: null },
     ]);
     expect(result.costs.rows[1]?.channels).toEqual([
       { channel: "preferred_retail", daysSupply: 30, copayCents: null, coinsurancePct: "50.00" },

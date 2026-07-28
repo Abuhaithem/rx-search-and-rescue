@@ -39,6 +39,7 @@ const makeModel = (): ReportModel => ({
       ],
     },
   ],
+  costMatrix: null,
   benefits: [],
   deductibleFootnote: null,
   disclaimer: null,

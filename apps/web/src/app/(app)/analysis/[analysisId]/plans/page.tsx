@@ -38,7 +38,7 @@ export default async function SelectPlansPage({
       zip={comparison.client.zip}
       county={comparison.client.county}
       planYear={comparison.analysis.planYear}
-      pharmacyName={comparison.pricingPharmacy?.name ?? null}
+      pharmacyName={comparison.primaryPharmacy?.name ?? null}
       plans={plans}
       initialSelected={comparison.plans.map((p) => p.plan.id)}
       locked={

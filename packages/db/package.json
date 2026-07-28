@@ -16,6 +16,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "seed:demo": "tsx src/seed-demo.ts",
+    "seed:testing": "tsx src/seed-testing.ts",
     "wipe:demo": "tsx src/wipe-demo.ts"
   },
   "dependencies": {

@@ -10,7 +10,8 @@ import { CoverageCell } from "@/components/domain/coverage-cell";
 import { PageHeader } from "@/components/domain/page-header";
 import { PlanSummaryCard } from "@/components/domain/plan-summary-card";
 import { RestrictionChip } from "@/components/domain/restriction-chip";
-import { ChannelRow } from "./_components/channel-row";
+import { CostMatrix } from "@/components/domain/cost-matrix";
+import { MailOrderToggle } from "./_components/mail-order-toggle";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -72,31 +73,24 @@ export default async function ComparisonPage({
   if (!comparison) notFound();
   if (comparison.plans.length === 0) redirect(`/analysis/${analysisId}/plans`);
 
-  const { client, plans, grid, pricingPharmacy, channel, analysis, entryProvenance } = comparison;
+  const { client, plans, grid, primaryPharmacy, costMatrix, analysis, entryProvenance } = comparison;
   const bestPlanId = bestCoveragePlanId(plans.map((p) => p.summary));
 
   const pharmacyNoteFor = (status: (typeof plans)[number]["pharmacyStatus"]): string | undefined => {
-    if (!pricingPharmacy || !status) return undefined;
+    if (!primaryPharmacy || !status) return undefined;
     switch (status) {
       case "preferred":
-        return `${pricingPharmacy.name}: Preferred`;
+        return `${primaryPharmacy.name}: Preferred`;
       case "standard":
-        return `${pricingPharmacy.name}: Standard — higher copays`;
+        return `${primaryPharmacy.name}: Standard — higher copays`;
       case "out_of_network":
-        return `${pricingPharmacy.name}: Not in network`;
+        return `${primaryPharmacy.name}: Not in network`;
     }
   };
 
-  const channelLabel =
-    channel === null
-      ? pricingPharmacy
-        ? `${pricingPharmacy.name}'s network status on each plan`
-        : "each plan's preferred retail pricing"
-      : channel === "preferred_retail"
-        ? "preferred retail pricing"
-        : channel === "standard_retail"
-          ? "standard retail pricing"
-          : "mail order (90-day) pricing";
+  const gridPricingLabel = primaryPharmacy
+    ? `${primaryPharmacy.name}'s network status on each plan`
+    : "each plan's most efficient in-network pricing";
 
   return (
     <div className="space-y-6">
@@ -113,12 +107,6 @@ export default async function ComparisonPage({
             </Button>
           </>
         }
-      />
-
-      <ChannelRow
-        analysisId={analysisId}
-        value={analysis.pricingChannelOverride ?? (pricingPharmacy ? "client" : "preferred_retail")}
-        clientPharmacyName={pricingPharmacy?.name ?? null}
       />
 
       <div
@@ -140,6 +128,12 @@ export default async function ComparisonPage({
           />
         ))}
       </div>
+
+      <CostMatrix
+        rows={costMatrix}
+        plans={plans}
+        controls={<MailOrderToggle analysisId={analysisId} checked={analysis.includeMailOrder} />}
+      />
 
       <Card className="overflow-hidden">
         <Table>
@@ -239,8 +233,8 @@ export default async function ComparisonPage({
           </TBody>
         </Table>
         <p className="border-t border-mist/60 px-4 py-3 text-xs text-steel">
-          Copays shown use {channelLabel}. Click any cell to see the exact formulary line it came
-          from.
+          Per-drug copays shown use {gridPricingLabel}. Compare pharmacies in the cost table above.
+          Click any cell to see the exact formulary line it came from.
         </p>
       </Card>
     </div>

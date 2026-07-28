@@ -140,7 +140,7 @@ describe("parseCostLine", () => {
     expect(result.row.channels).toEqual([
       { channel: "preferred_retail", daysSupply: 30, copayCents: 4700, coinsurancePct: null },
       { channel: "standard_retail", daysSupply: 30, copayCents: null, coinsurancePct: "25.00" },
-      { channel: "mail_order", daysSupply: 30, copayCents: 13100, coinsurancePct: null },
+      { channel: "preferred_mail", daysSupply: 30, copayCents: 13100, coinsurancePct: null },
     ]);
   });
 
@@ -153,14 +153,14 @@ describe("parseCostLine", () => {
     expect(result.row.channels[0]).toMatchObject({ daysSupply: 90, copayCents: 0 });
   });
 
-  it("falls back to non-preferred mail when preferred mail is absent", () => {
+  it("maps non-preferred mail to standard_mail", () => {
     const result = parseCostLine(
       ["H1350", "033", "0", "1", "2", "1", "", "", "", "", "", "", "2", "30"],
       costIndex,
     );
     if (result.kind !== "row") throw new Error("expected row");
     expect(result.row.channels).toEqual([
-      { channel: "mail_order", daysSupply: 30, copayCents: null, coinsurancePct: "30.00" },
+      { channel: "standard_mail", daysSupply: 30, copayCents: null, coinsurancePct: "30.00" },
     ]);
   });
 

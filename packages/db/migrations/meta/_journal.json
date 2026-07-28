@@ -15,6 +15,20 @@
       "when": 1785150886808,
       "tag": "0001_outgoing_xavin",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785227228498,
+      "tag": "0002_add_analysis_pharmacies",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1785227254676,
+      "tag": "0003_drop_analysis_pricing_scalars",
+      "breakpoints": true
     }
   ]
 }

@@ -1,8 +1,9 @@
 /**
  * getComparison: fetch pre-ingested rows, run the PURE engine from
- * @rxsr/core/analysis, zip cells with medication metadata for the grid.
+ * @rxsr/core/analysis, zip cells with medication metadata for the grid, and
+ * price every compared pharmacy into a plan × pharmacy cost matrix.
  * loadComparisonInputs is shared with actions/analysis.ts (runComparison
- * persists the same engine output it previews here).
+ * persists the same coverage cells it previews here).
  */
 import { and, eq, inArray } from "drizzle-orm";
 import {
@@ -16,15 +17,26 @@ import {
   plans,
 } from "@rxsr/db";
 import {
+  mailChannelForPlan,
+  priceScenarios,
+  retailChannelForStatus,
   runAnalysis,
   type AnalysisOutput,
   type CellResult,
+  type CostMatrixCell,
   type EngineFormularyEntry,
   type EngineMedication,
   type EnginePlan,
   type PlanSummary,
+  type PricingScenario,
 } from "@rxsr/core/analysis";
-import type { AnalysisStatus, NetworkStatus, PharmacyChannel } from "@rxsr/core";
+import {
+  CHANNEL_LABELS,
+  type AnalysisStatus,
+  type Cents,
+  type NetworkStatus,
+  type PharmacyChannel,
+} from "@rxsr/core";
 
 export type AnalysisRow = typeof analyses.$inferSelect;
 export type ClientRow = typeof clients.$inferSelect;
@@ -37,7 +49,7 @@ export interface ComparisonPlanMeta {
   carrierName: string;
   isCurrent: boolean;
   position: number;
-  /** Client pharmacy's network status on this plan; null = unknown. */
+  /** Primary pharmacy's network status on this plan; null = unknown. */
   pharmacyStatus: NetworkStatus | null;
 }
 
@@ -49,6 +61,17 @@ export interface EntryProvenance {
   formularyLabel: string;
 }
 
+/** A pharmacy row of the cost matrix, plus which plans had no network row on file. */
+export interface ComparisonScenario {
+  key: string;
+  label: string;
+  kind: "retail" | "mail";
+  pharmacyId: string | null;
+  scenario: PricingScenario;
+  /** Plan ids where the retail channel was assumed (no network status on file). */
+  assumedPlanIds: Set<string>;
+}
+
 export interface ComparisonInputs {
   analysis: AnalysisRow;
   client: ClientRow;
@@ -56,7 +79,9 @@ export interface ComparisonInputs {
   planMeta: ComparisonPlanMeta[];
   engineMedications: EngineMedication[];
   enginePlans: EnginePlan[];
-  pricingPharmacy: PharmacyRow | null;
+  /** Drives the classic per-cell grid pricing; the first compared pharmacy. */
+  primaryPharmacy: PharmacyRow | null;
+  scenarios: ComparisonScenario[];
   /** Keyed by formulary entry id; lookup via CellResult.matchedEntryId. */
   entryProvenance: Record<string, EntryProvenance>;
 }
@@ -93,33 +118,60 @@ export async function loadComparisonInputs(analysisId: string): Promise<Comparis
         with: { plan: { with: { carrier: true, tierCosts: true } } },
         orderBy: (ap, { asc }) => [asc(ap.position)],
       },
-      pricingPharmacy: true,
+      pharmacies: {
+        orderBy: (ap, { asc }) => [asc(ap.position)],
+        with: { pharmacy: true },
+      },
     },
   });
   if (!analysis) return null;
 
-  const { client, plans: analysisPlanRows, pricingPharmacy, ...analysisColumns } = analysis;
+  const {
+    client,
+    plans: analysisPlanRows,
+    pharmacies: analysisPharmacyRows,
+    ...analysisColumns
+  } = analysis;
   const { medications, pharmacies: clientPharmacyRows, ...clientColumns } = client;
 
-  // Pricing context: explicit pricing pharmacy, else confirmed rank-1 pharmacy.
-  const fallbackPharmacy =
-    clientPharmacyRows.find((p) => p.confirmed && p.pharmacy)?.pharmacy ?? null;
-  const effectivePharmacy = pricingPharmacy ?? fallbackPharmacy;
+  // The pharmacies we price: the analysis's explicit set, else the client's
+  // confirmed pharmacies as a fallback (older analyses / demo seed).
+  const explicit = analysisPharmacyRows
+    .map((ap) => ap.pharmacy)
+    .filter((p): p is PharmacyRow => p != null);
+  const fallback = clientPharmacyRows
+    .filter((p) => p.confirmed && p.pharmacy)
+    .map((p) => p.pharmacy)
+    .filter((p): p is PharmacyRow => p != null);
+  const comparedPharmacies = explicit.length > 0 ? explicit : fallback;
+  const primaryPharmacy = comparedPharmacies[0] ?? null;
 
   const planIds = analysisPlanRows.map((ap) => ap.planId);
-  const statusByPlan = new Map<string, NetworkStatus>();
-  if (effectivePharmacy && planIds.length > 0) {
+
+  // One query for every compared pharmacy × plan network status.
+  const statusByPharmacyPlan = new Map<string, NetworkStatus>();
+  const pharmacyIds = comparedPharmacies.map((p) => p.id);
+  if (pharmacyIds.length > 0 && planIds.length > 0) {
     const networkRows = await db
-      .select({ planId: planPharmacyNetworks.planId, status: planPharmacyNetworks.status })
+      .select({
+        pharmacyId: planPharmacyNetworks.pharmacyId,
+        planId: planPharmacyNetworks.planId,
+        status: planPharmacyNetworks.status,
+      })
       .from(planPharmacyNetworks)
       .where(
         and(
-          eq(planPharmacyNetworks.pharmacyId, effectivePharmacy.id),
+          inArray(planPharmacyNetworks.pharmacyId, pharmacyIds),
           inArray(planPharmacyNetworks.planId, planIds),
         ),
       );
-    for (const row of networkRows) statusByPlan.set(row.planId, row.status);
+    for (const row of networkRows) {
+      statusByPharmacyPlan.set(`${row.pharmacyId}:${row.planId}`, row.status);
+    }
   }
+
+  const statusForPrimary = (planId: string): NetworkStatus | null =>
+    primaryPharmacy ? (statusByPharmacyPlan.get(`${primaryPharmacy.id}:${planId}`) ?? null) : null;
 
   const formularyIds = [
     ...new Set(
@@ -181,7 +233,7 @@ export async function loadComparisonInputs(analysisId: string): Promise<Comparis
       carrierName: carrier.name,
       isCurrent: ap.isCurrent,
       position: ap.position,
-      pharmacyStatus: statusByPlan.get(ap.planId) ?? null,
+      pharmacyStatus: statusForPrimary(ap.planId),
     };
   });
 
@@ -199,17 +251,29 @@ export async function loadComparisonInputs(analysisId: string): Promise<Comparis
       copayCents: tc.copayCents,
       coinsurancePct: tc.coinsurancePct == null ? null : Number(tc.coinsurancePct),
     })),
-    clientPharmacyStatus: statusByPlan.get(ap.planId) ?? null,
+    clientPharmacyStatus: statusForPrimary(ap.plan.id),
   }));
+  const orderedPlanIds = orderedPlanRows.map((ap) => ap.plan.id);
+  const mailChannelByPlan = new Map(
+    enginePlans.map((p) => [p.id, mailChannelForPlan(p.tierCosts)]),
+  );
+  const scenarios = resolvePricingScenarios({
+    comparedPharmacies,
+    orderedPlanIds,
+    mailChannelByPlan,
+    statusByPharmacyPlan,
+    includeMailOrder: analysis.includeMailOrder,
+  });
 
   return {
-    analysis: analysisColumns,
-    client: clientColumns,
+    analysis: analysisColumns as AnalysisRow,
+    client: clientColumns as ClientRow,
     medications,
     planMeta,
     engineMedications: medications.map(toEngineMedication),
     enginePlans,
-    pricingPharmacy: effectivePharmacy,
+    primaryPharmacy,
+    scenarios,
     entryProvenance,
   };
 }
@@ -224,21 +288,93 @@ export interface ComparisonPlanColumn extends ComparisonPlanMeta {
   summary: PlanSummary;
 }
 
+/** One priced cell of the cost matrix, ready for the UI. */
+export interface ComparisonMatrixCell {
+  planId: string;
+  channel: PharmacyChannel | null;
+  channelLabel: string;
+  estMonthlyCents: Cents | null;
+  unavailable: boolean;
+  isPartial: boolean;
+  hasCoinsurance: boolean;
+  /** Retail channel was assumed (no network row on file) — surface amber. */
+  assumed: boolean;
+  /** Cheapest priced plan for this pharmacy row — the "best for you" highlight. */
+  cheapest: boolean;
+}
+
+export interface ComparisonMatrixRow {
+  key: string;
+  label: string;
+  kind: "retail" | "mail";
+  cells: ComparisonMatrixCell[];
+}
+
 export interface ComparisonData {
   analysis: {
     id: string;
     status: AnalysisStatus;
     planYear: number;
-    pricingChannelOverride: PharmacyChannel | null;
+    includeMailOrder: boolean;
   };
   client: ClientRow;
   plans: ComparisonPlanColumn[];
   grid: ComparisonGridRow[];
-  pricingPharmacy: PharmacyRow | null;
-  /** Channel override in effect; null = derived per plan from the pharmacy's network status. */
-  channel: PharmacyChannel | null;
+  primaryPharmacy: PharmacyRow | null;
+  costMatrix: ComparisonMatrixRow[];
   /** Keyed by formulary entry id; lookup via CellResult.matchedEntryId. */
   entryProvenance: Record<string, EntryProvenance>;
+}
+
+const channelLabel = (channel: PharmacyChannel | null): string =>
+  channel ? CHANNEL_LABELS[channel] : "Out of Network";
+
+/**
+ * Build the cost-matrix scenarios: one retail row per compared pharmacy (its
+ * channel resolved per plan from network status), plus a mail row when opted
+ * in. Pure — shared by the on-screen comparison and the report builder.
+ */
+export function resolvePricingScenarios(args: {
+  comparedPharmacies: { id: string; name: string }[];
+  orderedPlanIds: string[];
+  mailChannelByPlan: Map<string, PharmacyChannel | null>;
+  statusByPharmacyPlan: Map<string, NetworkStatus>;
+  includeMailOrder: boolean;
+}): ComparisonScenario[] {
+  const scenarios: ComparisonScenario[] = args.comparedPharmacies.map((pharmacy) => {
+    const channelByPlan: Record<string, PharmacyChannel | null> = {};
+    const assumedPlanIds = new Set<string>();
+    for (const planId of args.orderedPlanIds) {
+      const status = args.statusByPharmacyPlan.get(`${pharmacy.id}:${planId}`) ?? null;
+      channelByPlan[planId] = retailChannelForStatus(status);
+      if (status == null) assumedPlanIds.add(planId);
+    }
+    return {
+      key: pharmacy.id,
+      label: pharmacy.name,
+      kind: "retail",
+      pharmacyId: pharmacy.id,
+      scenario: { key: pharmacy.id, label: pharmacy.name, kind: "retail", channelByPlan },
+      assumedPlanIds,
+    };
+  });
+
+  if (args.includeMailOrder) {
+    const channelByPlan: Record<string, PharmacyChannel | null> = {};
+    for (const planId of args.orderedPlanIds) {
+      channelByPlan[planId] = args.mailChannelByPlan.get(planId) ?? null;
+    }
+    scenarios.push({
+      key: "mail",
+      label: "Mail order (90-day)",
+      kind: "mail",
+      pharmacyId: null,
+      scenario: { key: "mail", label: "Mail order (90-day)", kind: "mail", channelByPlan },
+      assumedPlanIds: new Set(),
+    });
+  }
+
+  return scenarios;
 }
 
 export function zipComparison(
@@ -267,15 +403,55 @@ export function zipComparison(
   return { plans, grid };
 }
 
-export async function getComparison(
-  analysisId: string,
-  channelOverride?: PharmacyChannel,
-): Promise<ComparisonData | null> {
+function buildCostMatrix(
+  inputs: ComparisonInputs,
+  matrixCells: CostMatrixCell[],
+): ComparisonMatrixRow[] {
+  const byKey = new Map(matrixCells.map((c) => [`${c.scenarioKey}:${c.planId}`, c]));
+  const planOrder = inputs.planMeta.map((m) => m.plan.id);
+
+  return inputs.scenarios.map((scenario) => {
+    // Cheapest priced plan in this row (per pharmacy across plans).
+    let cheapestPlanId: string | null = null;
+    let cheapest = Infinity;
+    for (const planId of planOrder) {
+      const cell = byKey.get(`${scenario.key}:${planId}`);
+      if (cell && !cell.unavailable && cell.estMonthlyCents != null && cell.estMonthlyCents < cheapest) {
+        cheapest = cell.estMonthlyCents;
+        cheapestPlanId = planId;
+      }
+    }
+
+    const cells: ComparisonMatrixCell[] = planOrder.map((planId) => {
+      const cell = byKey.get(`${scenario.key}:${planId}`);
+      return {
+        planId,
+        channel: cell?.channel ?? null,
+        channelLabel: channelLabel(cell?.channel ?? null),
+        estMonthlyCents: cell?.estMonthlyCents ?? null,
+        unavailable: cell?.unavailable ?? true,
+        isPartial: cell?.isPartial ?? false,
+        hasCoinsurance: cell?.hasCoinsurance ?? false,
+        assumed: scenario.assumedPlanIds.has(planId),
+        cheapest: planId === cheapestPlanId && cheapestPlanId != null,
+      };
+    });
+
+    return { key: scenario.key, label: scenario.label, kind: scenario.kind, cells };
+  });
+}
+
+export async function getComparison(analysisId: string): Promise<ComparisonData | null> {
   const inputs = await loadComparisonInputs(analysisId);
   if (!inputs) return null;
 
-  const effectiveOverride = channelOverride ?? inputs.analysis.pricingChannelOverride ?? null;
-  const output = runAnalysis(inputs.engineMedications, inputs.enginePlans, effectiveOverride);
+  const output = runAnalysis(inputs.engineMedications, inputs.enginePlans);
+  const matrixCells = priceScenarios(
+    output.cells,
+    inputs.engineMedications,
+    inputs.enginePlans,
+    inputs.scenarios.map((s) => s.scenario),
+  );
   const { plans: planColumns, grid } = zipComparison(inputs, output);
 
   return {
@@ -283,13 +459,13 @@ export async function getComparison(
       id: inputs.analysis.id,
       status: inputs.analysis.status,
       planYear: inputs.analysis.planYear,
-      pricingChannelOverride: inputs.analysis.pricingChannelOverride,
+      includeMailOrder: inputs.analysis.includeMailOrder,
     },
     client: inputs.client,
     plans: planColumns,
     grid,
-    pricingPharmacy: inputs.pricingPharmacy,
-    channel: effectiveOverride,
+    primaryPharmacy: inputs.primaryPharmacy,
+    costMatrix: buildCostMatrix(inputs, matrixCells),
     entryProvenance: inputs.entryProvenance,
   };
 }

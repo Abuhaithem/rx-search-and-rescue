@@ -225,7 +225,7 @@ await db.insert(s.planTierCosts).values([
     ["t6", 0, null],
     ["insulin", 3500, null],
   ]),
-  ...tierRows(trueBlue33!.id, "mail_order", 90, [
+  ...tierRows(trueBlue33!.id, "standard_mail", 90, [
     ["t1", 0, null],
     ["t2", 3000, null],
     ["t3", 13100, null],
@@ -234,7 +234,8 @@ await db.insert(s.planTierCosts).values([
     ["t6", 0, null],
     ["insulin", 9500, null],
   ]),
-  // MyCare 24 — standard + preferred (Bentley's Pacific Source table)
+  // MyCare 24 — standard + preferred retail, plus a preferred mail table
+  // (CenterWell-style) so the demo exercises all four channels.
   ...tierRows(myCare24!.id, "standard_retail", 30, [
     ["t1", 0, null],
     ["t2", 1200, null],
@@ -250,6 +251,22 @@ await db.insert(s.planTierCosts).values([
     ["t4", null, "31.00"],
     ["t5", null, "30.00"],
     ["insulin", 3500, null],
+  ]),
+  ...tierRows(myCare24!.id, "preferred_mail", 90, [
+    ["t1", 0, null],
+    ["t2", 0, null],
+    ["t3", 12000, null],
+    ["t4", null, "31.00"],
+    ["t5", null, "30.00"],
+    ["insulin", 9500, null],
+  ]),
+  ...tierRows(myCare24!.id, "standard_mail", 90, [
+    ["t1", 300, null],
+    ["t2", 3600, null],
+    ["t3", 14100, null],
+    ["t4", null, "32.00"],
+    ["t5", null, "30.00"],
+    ["insulin", 10500, null],
   ]),
 ]);
 
@@ -283,7 +300,7 @@ await db.insert(s.planPharmacyNetworks).values([
   { planId: trueBlue33!.id, pharmacyId: valley!.id, status: "preferred", source: "agent" },
   { planId: myCare24!.id, pharmacyId: valley!.id, status: "standard", source: "agent" },
   { planId: uhc0009!.id, pharmacyId: drugStore!.id, status: "preferred", source: "agent" },
-  { planId: trueBlue33!.id, pharmacyId: drugStore!.id, status: "preferred", source: "agent" },
+  { planId: trueBlue33!.id, pharmacyId: drugStore!.id, status: "standard", source: "agent" },
   { planId: myCare24!.id, pharmacyId: drugStore!.id, status: "standard", source: "agent" },
 ]);
 
@@ -301,14 +318,24 @@ const [demo] = await db
   })
   .returning();
 
-await db.insert(s.clientPharmacies).values({
-  clientId: demo!.id,
-  rank: 1,
-  rawText: "The Drug Store - 91 E Croy Hailey ID 83333",
-  pharmacyId: drugStore!.id,
-  matchConfidence: "0.980",
-  confirmed: true,
-});
+await db.insert(s.clientPharmacies).values([
+  {
+    clientId: demo!.id,
+    rank: 1,
+    rawText: "The Drug Store - 91 E Croy Hailey ID 83333",
+    pharmacyId: drugStore!.id,
+    matchConfidence: "0.980",
+    confirmed: true,
+  },
+  {
+    clientId: demo!.id,
+    rank: 2,
+    rawText: "Valley Apothecary - 16 W Bullion Hailey ID 83333",
+    pharmacyId: valley!.id,
+    matchConfidence: "0.960",
+    confirmed: true,
+  },
+]);
 
 await db.insert(s.clientMedications).values(
   (

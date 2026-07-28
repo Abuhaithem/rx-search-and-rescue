@@ -66,6 +66,25 @@ const fixtureModel: ReportModel = {
       ],
     },
   ],
+  costMatrix: {
+    rows: [
+      {
+        label: "The Drug Store",
+        cells: [
+          { display: "$48/mo", channelLabel: "Standard Retail", cheapest: false, unavailable: false },
+          { display: "$42/mo", channelLabel: "Preferred Retail", cheapest: true, unavailable: false },
+        ],
+      },
+      {
+        label: "Mail order (90-day)",
+        cells: [
+          { display: "Out of Network", channelLabel: "Out of Network", cheapest: false, unavailable: true },
+          { display: "$36/mo", channelLabel: "Preferred Mail", cheapest: true, unavailable: false },
+        ],
+      },
+    ],
+    note: "* Estimate excludes drugs with no listed copay at that pharmacy.",
+  },
   benefits: [
     {
       planName: "Humana Basic Rx",
@@ -126,6 +145,11 @@ describe("renderDocx", () => {
       "$8 -T2",
       "Not Covered",
       "50% Cost of Medication",
+      "Estimated Monthly Cost by Pharmacy",
+      "The Drug Store",
+      "$48/mo",
+      "Mail order (90-day)",
+      "Preferred Mail",
       "Humana — Humana Basic Rx",
       "PacificSource — MyCare 24",
       "Plan Premium",

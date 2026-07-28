@@ -230,9 +230,9 @@ export const bentleyPlans: EnginePlan[] = [
       { channel: "preferred_retail", tier: "t2", daysSupply: 30, copayCents: 1000, coinsurancePct: null },
       { channel: "preferred_retail", tier: "t3", daysSupply: 30, copayCents: null, coinsurancePct: 25 },
       { channel: "preferred_retail", tier: "t4", daysSupply: 30, copayCents: null, coinsurancePct: 45 },
-      { channel: "mail_order", tier: "t1", daysSupply: 90, copayCents: 0, coinsurancePct: null },
-      { channel: "mail_order", tier: "t2", daysSupply: 90, copayCents: 2400, coinsurancePct: null },
-      { channel: "mail_order", tier: "t4", daysSupply: 90, copayCents: null, coinsurancePct: 50 },
+      { channel: "standard_mail", tier: "t1", daysSupply: 90, copayCents: 0, coinsurancePct: null },
+      { channel: "standard_mail", tier: "t2", daysSupply: 90, copayCents: 2400, coinsurancePct: null },
+      { channel: "standard_mail", tier: "t4", daysSupply: 90, copayCents: null, coinsurancePct: 50 },
     ],
     clientPharmacyStatus: "standard",
   },
@@ -250,5 +250,5 @@ export const BENTLEY_EXPECTED_EST_MONTHLY_CENTS: Record<string, number> = {
   [PS_ID]: 4800,
 };
 
-/** PS priced via mail_order override: 90-day copays ÷ 3 → 4 × $8 = $32. */
+/** PS priced via standard_mail override: 90-day copays ÷ 3 → 4 × $8 = $32. */
 export const PS_MAIL_ORDER_EST_MONTHLY_CENTS = 3200;

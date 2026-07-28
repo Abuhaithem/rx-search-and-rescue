@@ -176,7 +176,11 @@ export function parseNetworkLine(
   };
 }
 
-export type CmsChannel = "preferred_retail" | "standard_retail" | "mail_order";
+export type CmsChannel =
+  | "preferred_retail"
+  | "standard_retail"
+  | "preferred_mail"
+  | "standard_mail";
 
 export interface CmsCostChannel {
   channel: CmsChannel;
@@ -269,20 +273,20 @@ export function parseCostLine(
     field(fields, index.costAmtNonpref),
   );
   if (standard) channels.push(standard);
-  const mail =
-    costChannel(
-      "mail_order",
-      daysSupply,
-      field(fields, index.costTypeMailPref),
-      field(fields, index.costAmtMailPref),
-    ) ??
-    costChannel(
-      "mail_order",
-      daysSupply,
-      field(fields, index.costTypeMailNonpref),
-      field(fields, index.costAmtMailNonpref),
-    );
-  if (mail) channels.push(mail);
+  const preferredMail = costChannel(
+    "preferred_mail",
+    daysSupply,
+    field(fields, index.costTypeMailPref),
+    field(fields, index.costAmtMailPref),
+  );
+  if (preferredMail) channels.push(preferredMail);
+  const standardMail = costChannel(
+    "standard_mail",
+    daysSupply,
+    field(fields, index.costTypeMailNonpref),
+    field(fields, index.costAmtMailNonpref),
+  );
+  if (standardMail) channels.push(standardMail);
 
   if (channels.length === 0) return { kind: "filtered" };
   return { kind: "row", row: { key: contractPlanKey(contract, plan), tier, channels } };

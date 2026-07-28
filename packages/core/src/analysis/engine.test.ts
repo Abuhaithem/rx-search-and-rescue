@@ -6,13 +6,17 @@
 import { describe, expect, it } from "vitest";
 import {
   findTierCost,
+  mailChannelForPlan,
   matchMedication,
+  priceScenarios,
   resolveChannel,
+  retailChannelForStatus,
   runAnalysis,
   type CellResult,
   type EngineFormularyEntry,
   type EngineMedication,
   type EnginePlan,
+  type PricingScenario,
 } from "./engine";
 import { tierFromNumber } from "../types";
 import {
@@ -350,31 +354,111 @@ describe("resolveChannel", () => {
   });
 
   it("override wins over pharmacy status", () => {
-    expect(resolveChannel("standard", "mail_order")).toBe("mail_order");
+    expect(resolveChannel("standard", "standard_mail")).toBe("standard_mail");
     expect(resolveChannel("out_of_network", "standard_retail")).toBe("standard_retail");
   });
 });
 
-describe("channelOverride mail_order", () => {
+describe("channelOverride standard_mail", () => {
   it("reprices Pacific Source from its 90-day mail table, normalized ÷3 to a 30-day month", () => {
     const ps = bentleyPlans.find((p) => p.id === PS_ID)!;
-    const output = runAnalysis(bentleyMedications, [ps], "mail_order");
+    const output = runAnalysis(bentleyMedications, [ps], "standard_mail");
 
     const cell = cellOf(output.cells, "med-estradiol-cream", PS_ID);
     expect(cell.copayCents).toBe(2400); // raw 90-day copay on the cell
 
     const summary = summaryOf(output, PS_ID);
-    expect(summary.pricedChannel).toBe("mail_order");
+    expect(summary.pricedChannel).toBe("standard_mail");
     // 4 non-PRN T2 meds × ($24 / 3) + 2 T1 meds × $0 = $32
     expect(summary.estMonthlyCents).toBe(PS_MAIL_ORDER_EST_MONTHLY_CENTS);
     expect(summary.estMonthlyIsPartial).toBe(false);
   });
 
-  it("a plan with no mail_order table gets no price (partial estimate, no retail fallback)", () => {
+  it("a plan with no mail table gets no price (partial estimate, no retail fallback)", () => {
     const uhc = bentleyPlans.find((p) => p.id === UHC_ID)!;
-    const output = runAnalysis(bentleyMedications, [uhc], "mail_order");
+    const output = runAnalysis(bentleyMedications, [uhc], "standard_mail");
     expect(cellOf(output.cells, "med-losartan", UHC_ID).copayCents).toBeNull();
     expect(summaryOf(output, UHC_ID).estMonthlyIsPartial).toBe(true);
+  });
+});
+
+// ── Cost matrix: one pharmacy row × plan column ─────────────────────────────
+
+describe("priceScenarios (cost matrix)", () => {
+  const { cells } = runAnalysis(bentleyMedications, bentleyPlans);
+
+  const retailScenario = (key: string, label: string): PricingScenario => ({
+    key,
+    label,
+    kind: "retail",
+    channelByPlan: Object.fromEntries(
+      bentleyPlans.map((p) => [p.id, retailChannelForStatus(p.clientPharmacyStatus)]),
+    ),
+  });
+
+  const cellFor = (matrix: ReturnType<typeof priceScenarios>, scenarioKey: string, planId: string) => {
+    const found = matrix.find((c) => c.scenarioKey === scenarioKey && c.planId === planId);
+    if (!found) throw new Error(`missing matrix cell ${scenarioKey} × ${planId}`);
+    return found;
+  };
+
+  it("prices the client pharmacy per plan, matching the per-plan monthly totals", () => {
+    const matrix = priceScenarios(cells, bentleyMedications, bentleyPlans, [
+      retailScenario("valley", "Valley Apothecary"),
+    ]);
+    expect(cellFor(matrix, "valley", UHC_ID).estMonthlyCents).toBe(
+      BENTLEY_EXPECTED_EST_MONTHLY_CENTS[UHC_ID],
+    );
+    expect(cellFor(matrix, "valley", BC_ID).estMonthlyCents).toBe(
+      BENTLEY_EXPECTED_EST_MONTHLY_CENTS[BC_ID],
+    );
+    expect(cellFor(matrix, "valley", PS_ID).estMonthlyCents).toBe(
+      BENTLEY_EXPECTED_EST_MONTHLY_CENTS[PS_ID],
+    );
+    expect(cellFor(matrix, "valley", PS_ID).channel).toBe("standard_retail");
+  });
+
+  it("adds a mail row priced from each plan's mail table, unavailable where there is none", () => {
+    const mail: PricingScenario = {
+      key: "mail",
+      label: "Mail order (90-day)",
+      kind: "mail",
+      channelByPlan: Object.fromEntries(
+        bentleyPlans.map((p) => [p.id, mailChannelForPlan(p.tierCosts)]),
+      ),
+    };
+    const matrix = priceScenarios(cells, bentleyMedications, bentleyPlans, [mail]);
+
+    // UHC and BC have no mail table → unavailable.
+    expect(cellFor(matrix, "mail", UHC_ID).unavailable).toBe(true);
+    expect(cellFor(matrix, "mail", UHC_ID).estMonthlyCents).toBeNull();
+    // PS has a standard_mail table → $32 monthly (90-day copays ÷ 3).
+    const ps = cellFor(matrix, "mail", PS_ID);
+    expect(ps.channel).toBe("standard_mail");
+    expect(ps.estMonthlyCents).toBe(PS_MAIL_ORDER_EST_MONTHLY_CENTS);
+  });
+
+  it("an out-of-network pharmacy row is unavailable on that plan", () => {
+    const oon: PricingScenario = {
+      key: "oon",
+      label: "Corner Drug",
+      kind: "retail",
+      channelByPlan: { [UHC_ID]: null, [BC_ID]: "preferred_retail", [PS_ID]: "standard_retail" },
+    };
+    const matrix = priceScenarios(cells, bentleyMedications, bentleyPlans, [oon]);
+    expect(cellFor(matrix, "oon", UHC_ID).unavailable).toBe(true);
+    expect(cellFor(matrix, "oon", BC_ID).unavailable).toBe(false);
+  });
+
+  it("nulls the monthly total when a covered non-PRN med is coinsurance-priced", () => {
+    const meds = bentleyMedications.map((m) =>
+      m.id === "med-hydrocodone-acet" ? { ...m, prn: false } : m,
+    );
+    const { cells: c2 } = runAnalysis(meds, bentleyPlans);
+    const matrix = priceScenarios(c2, meds, bentleyPlans, [retailScenario("valley", "Valley")]);
+    const bc = cellFor(matrix, "valley", BC_ID);
+    expect(bc.hasCoinsurance).toBe(true);
+    expect(bc.estMonthlyCents).toBeNull();
   });
 });
 
@@ -421,10 +505,17 @@ describe("findTierCost", () => {
     expect(findTierCost(psCosts, 2, "preferred_retail")?.copayCents).toBe(1000);
   });
 
-  it("mail_order never falls back to retail tables", () => {
-    expect(findTierCost(uhcCosts, 2, "mail_order")).toBeNull();
-    // PS has mail rows for t1/t2/t4 but not t3:
-    expect(findTierCost(psCosts, 3, "mail_order")).toBeNull();
+  it("mail channels never fall back to retail tables", () => {
+    expect(findTierCost(uhcCosts, 2, "standard_mail")).toBeNull();
+    expect(findTierCost(uhcCosts, 2, "preferred_mail")).toBeNull();
+    // PS has standard_mail rows for t1/t2/t4 but not t3, and no preferred_mail:
+    expect(findTierCost(psCosts, 3, "standard_mail")).toBeNull();
+  });
+
+  it("preferred_mail request falls back to a standard_mail-only table (Pacific Source)", () => {
+    // PS has only standard_mail; a preferred_mail request uses it.
+    expect(findTierCost(psCosts, 2, "preferred_mail")?.channel).toBe("standard_mail");
+    expect(findTierCost(psCosts, 2, "preferred_mail")?.copayCents).toBe(2400);
   });
 
   it("returns null when the tier exists in no table", () => {

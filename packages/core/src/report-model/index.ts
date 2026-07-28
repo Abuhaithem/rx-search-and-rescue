@@ -34,6 +34,32 @@ export interface ReportPlanBenefits {
   tierRows: ReportTierRow[];
 }
 
+/** One priced cell of the cost matrix — a pharmacy row × plan column. */
+export interface ReportCostMatrixCell {
+  /** Print-ready amount, e.g. "$48/mo", "See coinsurance", "Out of Network". */
+  display: string;
+  /** Channel this cell priced at, e.g. "Preferred Retail", "Standard Mail". */
+  channelLabel: string;
+  /** Cheapest plan for this pharmacy row — the "best for you" highlight. */
+  cheapest: boolean;
+  unavailable: boolean;
+}
+
+export interface ReportCostMatrixRow {
+  /** Pharmacy name, or "Mail order (90-day)". */
+  label: string;
+  cells: ReportCostMatrixCell[]; // aligned with planNames
+}
+
+/**
+ * Estimated monthly cost at each of the client's pharmacies, per plan — the
+ * comparison centerpiece. Columns mirror the grid's plan columns.
+ */
+export interface ReportCostMatrix {
+  rows: ReportCostMatrixRow[];
+  note: string | null;
+}
+
 export interface ReportModel {
   clientName: string;
   clientExternalId: string | null;
@@ -48,6 +74,8 @@ export interface ReportModel {
   planNames: string[]; // grid column headers, current plan first
   currentPlanIndex: number | null;
   grid: ReportGridRow[];
+  /** Estimated monthly cost per pharmacy × plan; null when no pharmacy is priced. */
+  costMatrix: ReportCostMatrix | null;
   benefits: ReportPlanBenefits[];
   /** e.g. "RX Deductible applies to Tier 3, Tier 4 and Tier 5 medications on all plans." */
   deductibleFootnote: string | null;

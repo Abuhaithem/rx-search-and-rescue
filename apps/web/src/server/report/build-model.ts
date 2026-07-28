@@ -1,18 +1,33 @@
 /**
  * Analysis rows (+ overrides) → ReportModel. Reads the PERSISTED
- * analysis_results — the report always reflects the grid the agent reviewed,
- * not a fresh engine run. All formatting delegates to ./display; overrides
- * are applied last so agent edits always win.
+ * analysis_results — the report always reflects the grid the agent reviewed.
+ * Cost is derived live from current tier costs (per the pure-engine rule):
+ * the classic grid prices at the client's primary pharmacy, and the cost
+ * matrix prices every compared pharmacy per plan. Formatting delegates to
+ * ./display; overrides are applied last so agent edits always win.
  */
 import { and, eq, inArray } from "drizzle-orm";
 import { analyses, getDb, planPharmacyNetworks, profiles } from "@rxsr/db";
-import type { NetworkStatus } from "@rxsr/core";
-import { findTierCost, resolveChannel, type EngineTierCost } from "@rxsr/core/analysis";
+import { CHANNEL_LABELS, type Cents, type NetworkStatus } from "@rxsr/core";
+import {
+  findTierCost,
+  mailChannelForPlan,
+  priceScenarios,
+  resolveChannel,
+  type CellResult,
+  type CostMatrixCell,
+  type EngineMedication,
+  type EnginePlan,
+  type EngineTierCost,
+} from "@rxsr/core/analysis";
 import {
   applyOverrides,
+  centsDisplay,
+  type ReportCostMatrix,
   type ReportGridRow,
   type ReportModel,
 } from "@rxsr/core/report-model";
+import { resolvePricingScenarios } from "../queries/comparison";
 import {
   buildDeductibleFootnote,
   buildPlanBenefits,
@@ -28,6 +43,14 @@ const DISCLAIMER =
   "for the plan year shown. Cost sharing shown is the plan's tier copay or coinsurance, " +
   "not a pharmacy price. Confirm final costs with the carrier before enrolling.";
 
+function formatMatrixCellDisplay(cell: CostMatrixCell): string {
+  if (cell.unavailable) return "Out of Network";
+  if (cell.hasCoinsurance) return "See coinsurance";
+  if (cell.estMonthlyCents == null) return "—";
+  const base = `${centsDisplay(cell.estMonthlyCents)}/mo`;
+  return cell.isPartial ? `${base}*` : base;
+}
+
 export async function buildReportModel(analysisId: string): Promise<ReportModel | null> {
   const db = getDb();
   const analysis = await db.query.analyses.findFirst({
@@ -42,9 +65,9 @@ export async function buildReportModel(analysisId: string): Promise<ReportModel 
         with: { plan: { with: { carrier: true, tierCosts: true } } },
         orderBy: (ap, { asc }) => [asc(ap.position)],
       },
+      pharmacies: { orderBy: (ap, { asc }) => [asc(ap.position)], with: { pharmacy: true } },
       results: { with: { medication: true } },
       overrides: true,
-      pricingPharmacy: true,
     },
   });
   if (!analysis) return null;
@@ -58,30 +81,43 @@ export async function buildReportModel(analysisId: string): Promise<ReportModel 
   const orderedPlans = [...analysis.plans].sort((a, b) =>
     a.isCurrent === b.isCurrent ? a.position - b.position : a.isCurrent ? -1 : 1,
   );
+  const orderedPlanIds = orderedPlans.map((ap) => ap.planId);
   const currentPlanIndex = orderedPlans.findIndex((ap) => ap.isCurrent);
 
-  // Pricing pharmacy: explicit choice, else the client's confirmed rank-1.
-  const effectivePharmacy =
-    analysis.pricingPharmacy ??
-    analysis.client.pharmacies.find((p) => p.confirmed && p.pharmacy)?.pharmacy ??
-    null;
+  // Compared pharmacies: the analysis's explicit set, else client's confirmed.
+  const explicit = analysis.pharmacies
+    .map((ap) => ap.pharmacy)
+    .filter((p): p is NonNullable<typeof p> => p != null);
+  const fallback = analysis.client.pharmacies
+    .filter((p) => p.confirmed && p.pharmacy)
+    .map((p) => p.pharmacy)
+    .filter((p): p is NonNullable<typeof p> => p != null);
+  const comparedPharmacies = explicit.length > 0 ? explicit : fallback;
+  const primaryPharmacy = comparedPharmacies[0] ?? null;
 
-  const statusByPlan = new Map<string, NetworkStatus>();
-  if (effectivePharmacy && orderedPlans.length > 0) {
+  // Network status for every compared pharmacy × plan.
+  const statusByPharmacyPlan = new Map<string, NetworkStatus>();
+  const pharmacyIds = comparedPharmacies.map((p) => p.id);
+  if (pharmacyIds.length > 0 && orderedPlanIds.length > 0) {
     const networkRows = await db
-      .select({ planId: planPharmacyNetworks.planId, status: planPharmacyNetworks.status })
+      .select({
+        pharmacyId: planPharmacyNetworks.pharmacyId,
+        planId: planPharmacyNetworks.planId,
+        status: planPharmacyNetworks.status,
+      })
       .from(planPharmacyNetworks)
       .where(
         and(
-          eq(planPharmacyNetworks.pharmacyId, effectivePharmacy.id),
-          inArray(
-            planPharmacyNetworks.planId,
-            orderedPlans.map((ap) => ap.planId),
-          ),
+          inArray(planPharmacyNetworks.pharmacyId, pharmacyIds),
+          inArray(planPharmacyNetworks.planId, orderedPlanIds),
         ),
       );
-    for (const row of networkRows) statusByPlan.set(row.planId, row.status);
+    for (const row of networkRows) {
+      statusByPharmacyPlan.set(`${row.pharmacyId}:${row.planId}`, row.status);
+    }
   }
+  const statusForPrimary = (planId: string): NetworkStatus | null =>
+    primaryPharmacy ? (statusByPharmacyPlan.get(`${primaryPharmacy.id}:${planId}`) ?? null) : null;
 
   const tierCostsByPlan = new Map<string, EngineTierCost[]>(
     orderedPlans.map((ap) => [
@@ -100,9 +136,9 @@ export async function buildReportModel(analysisId: string): Promise<ReportModel 
   const resultByKey = new Map(
     analysis.results.map((r) => [`${r.medicationId}:${r.planId}`, r]),
   );
-  const medications = [...new Map(analysis.results.map((r) => [r.medicationId, r.medication])).values()].sort(
-    (a, b) => a.position - b.position,
-  );
+  const medications = [
+    ...new Map(analysis.results.map((r) => [r.medicationId, r.medication])).values(),
+  ].sort((a, b) => a.position - b.position);
 
   const grid: ReportGridRow[] = medications.map((medication) => ({
     medicationName: formatMedicationName(medication.name, medication.prn),
@@ -111,10 +147,7 @@ export async function buildReportModel(analysisId: string): Promise<ReportModel 
       if (!result) {
         return { display: "—", coverage: "not_on_formulary" as const, overridden: false };
       }
-      const channel = resolveChannel(
-        statusByPlan.get(ap.planId) ?? null,
-        analysis.pricingChannelOverride,
-      );
+      const channel = resolveChannel(statusForPrimary(ap.planId), null);
       const cost =
         channel && result.tier != null
           ? findTierCost(tierCostsByPlan.get(ap.planId) ?? [], result.tier, channel)
@@ -133,7 +166,59 @@ export async function buildReportModel(analysisId: string): Promise<ReportModel 
     }),
   }));
 
-  const includeMailOrder = analysis.pricingChannelOverride === "mail_order";
+  // Cost matrix: reuse the engine + the shared scenario resolver so the report
+  // matches the on-screen matrix exactly.
+  const engineMedications: EngineMedication[] = medications.map((m) => ({
+    id: m.id,
+    name: m.name,
+    normalizedName: null,
+    rxcuis: [],
+    relatedRxcuis: [],
+    genericOk: m.genericOk,
+    prn: m.prn,
+    quantity: m.quantity,
+    daysSupply: m.daysSupply,
+  }));
+  const enginePlans: EnginePlan[] = orderedPlans.map((ap) => ({
+    id: ap.planId,
+    name: ap.plan.name,
+    premiumCents: ap.plan.premiumCents,
+    rxDeductibleCents: ap.plan.rxDeductibleCents,
+    deductibleTiers: ap.plan.deductibleTiers,
+    entries: [],
+    tierCosts: tierCostsByPlan.get(ap.planId) ?? [],
+    clientPharmacyStatus: statusForPrimary(ap.planId),
+  }));
+  const cells: CellResult[] = analysis.results.map((r) => ({
+    medicationId: r.medicationId,
+    planId: r.planId,
+    coverage: r.coverage,
+    matchMethod: r.matchMethod,
+    matchedEntryId: r.matchedEntryId,
+    substitutionNote: r.substitutionNote,
+    tier: r.tier,
+    restrictions: null,
+    copayCents: null,
+    coinsurancePct: null,
+    needsConfirmation: r.needsConfirmation,
+  }));
+
+  const scenarios = resolvePricingScenarios({
+    comparedPharmacies: comparedPharmacies.map((p) => ({ id: p.id, name: p.name })),
+    orderedPlanIds,
+    mailChannelByPlan: new Map(
+      orderedPlanIds.map((id) => [id, mailChannelForPlan(tierCostsByPlan.get(id) ?? [])]),
+    ),
+    statusByPharmacyPlan,
+    includeMailOrder: analysis.includeMailOrder,
+  });
+
+  const costMatrix = buildReportCostMatrix(
+    scenarios,
+    priceScenarios(cells, engineMedications, enginePlans, scenarios.map((s) => s.scenario)),
+    orderedPlanIds,
+  );
+
   const benefits = orderedPlans.map((ap) =>
     buildPlanBenefits({
       planName: ap.plan.name,
@@ -141,15 +226,14 @@ export async function buildReportModel(analysisId: string): Promise<ReportModel 
       premiumCents: ap.plan.premiumCents,
       rxDeductibleCents: ap.plan.rxDeductibleCents,
       tierCosts: (tierCostsByPlan.get(ap.planId) ?? []).map((tc) => ({ ...tc })),
-      includeMailOrder,
     }),
   );
 
-  const pharmacyNotes = effectivePharmacy
+  const pharmacyNotes = primaryPharmacy
     ? orderedPlans
         .map((ap) => {
-          const status = statusByPlan.get(ap.planId);
-          return status ? pharmacyNote(effectivePharmacy.name, ap.plan.name, status) : null;
+          const status = statusForPrimary(ap.planId);
+          return status ? pharmacyNote(primaryPharmacy.name, ap.plan.name, status) : null;
         })
         .filter((note): note is string => note != null)
     : [];
@@ -166,6 +250,7 @@ export async function buildReportModel(analysisId: string): Promise<ReportModel 
     planNames: orderedPlans.map((ap) => ap.plan.name),
     currentPlanIndex: currentPlanIndex === -1 ? null : currentPlanIndex,
     grid,
+    costMatrix,
     benefits,
     deductibleFootnote: buildDeductibleFootnote(
       orderedPlans.map((ap) => ({
@@ -180,4 +265,48 @@ export async function buildReportModel(analysisId: string): Promise<ReportModel 
     model,
     analysis.overrides.map((o) => ({ path: o.path, value: o.value })),
   );
+}
+
+function buildReportCostMatrix(
+  scenarios: { key: string; label: string }[],
+  matrixCells: CostMatrixCell[],
+  orderedPlanIds: string[],
+): ReportCostMatrix | null {
+  if (scenarios.length === 0) return null;
+  const byKey = new Map(matrixCells.map((c) => [`${c.scenarioKey}:${c.planId}`, c]));
+
+  let sawPartial = false;
+  let sawCoinsurance = false;
+
+  const rows = scenarios.map((scenario) => {
+    let cheapestPlanId: string | null = null;
+    let cheapestCents: Cents = Infinity;
+    for (const planId of orderedPlanIds) {
+      const cell = byKey.get(`${scenario.key}:${planId}`);
+      if (cell?.estMonthlyCents != null && !cell.unavailable && cell.estMonthlyCents < cheapestCents) {
+        cheapestCents = cell.estMonthlyCents;
+        cheapestPlanId = planId;
+      }
+    }
+
+    const cells = orderedPlanIds.map((planId) => {
+      const cell = byKey.get(`${scenario.key}:${planId}`);
+      if (cell?.isPartial) sawPartial = true;
+      if (cell?.hasCoinsurance) sawCoinsurance = true;
+      return {
+        display: cell ? formatMatrixCellDisplay(cell) : "—",
+        channelLabel: cell?.channel ? CHANNEL_LABELS[cell.channel] : "Out of Network",
+        cheapest: planId === cheapestPlanId && cheapestPlanId != null,
+        unavailable: cell?.unavailable ?? true,
+      };
+    });
+    return { label: scenario.label, cells };
+  });
+
+  const notes: string[] = [];
+  if (sawPartial) notes.push("* Estimate excludes drugs with no listed copay at that pharmacy.");
+  if (sawCoinsurance)
+    notes.push("Plans marked “See coinsurance” charge a percentage — the dollar total depends on the drug's price.");
+
+  return { rows, note: notes.length > 0 ? notes.join(" ") : null };
 }

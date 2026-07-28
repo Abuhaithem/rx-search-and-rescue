@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { and, eq, notInArray } from "drizzle-orm";
 import {
   analyses,
+  analysisPharmacies,
   clientMedications,
   clientPharmacies,
   clients,
@@ -241,24 +242,37 @@ export async function confirmIntake(
             : eq(inForcePolicies.clientId, clientId),
         );
 
-      const rankOnePharmacyId =
-        input.pharmacies
-          .slice()
-          .sort((a, b) => (a.rank ?? 1) - (b.rank ?? 1))
-          .find((p) => p.pharmacyId)?.pharmacyId ?? null;
-
       const [analysisRow] = await tx
         .insert(analyses)
         .values({
           clientId,
           planYear: input.planYear,
           status: "new",
-          pricingPharmacyId: rankOnePharmacyId,
           assignedTo: profile.id,
           createdBy: profile.id,
         })
         .returning({ id: analyses.id });
       if (!analysisRow) throw new Error("Failed to create analysis");
+
+      // Cost-matrix rows: the client's matched pharmacies, deduped, ordered by rank.
+      const pricedPharmacies = [
+        ...new Map(
+          input.pharmacies
+            .slice()
+            .sort((a, b) => (a.rank ?? 1) - (b.rank ?? 1))
+            .filter((p): p is typeof p & { pharmacyId: string } => Boolean(p.pharmacyId))
+            .map((p) => [p.pharmacyId, p]),
+        ).values(),
+      ];
+      if (pricedPharmacies.length > 0) {
+        await tx.insert(analysisPharmacies).values(
+          pricedPharmacies.map((p, position) => ({
+            analysisId: analysisRow.id,
+            pharmacyId: p.pharmacyId,
+            position,
+          })),
+        );
+      }
 
       await writeAudit(tx, {
         actorId: profile.id,

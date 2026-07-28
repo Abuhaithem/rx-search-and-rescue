@@ -17,7 +17,8 @@ import { TierChecklist } from "./tier-checklist";
 const CHANNELS = [
   { channel: "preferred_retail", daysSupply: 30, label: "Preferred retail — 30 day" },
   { channel: "standard_retail", daysSupply: 30, label: "Standard retail — 30 day" },
-  { channel: "mail_order", daysSupply: 90, label: "Mail order — 90 day" },
+  { channel: "preferred_mail", daysSupply: 90, label: "Preferred mail — 90 day" },
+  { channel: "standard_mail", daysSupply: 90, label: "Standard mail — 90 day" },
 ] as const;
 
 const TIERS = [

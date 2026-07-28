@@ -111,6 +111,32 @@ export interface AnalysisOutput {
   summaries: PlanSummary[];
 }
 
+// ── Cost matrix (one pharmacy row × plan column) ─────────────────────────────
+
+/** A pharmacy the client is comparing, with its resolved channel per plan. */
+export interface PricingScenario {
+  /** Pharmacy id, or a synthetic key like "mail" for the plan's mail benefit. */
+  key: string;
+  label: string;
+  kind: "retail" | "mail";
+  /** Resolved channel per plan id; null = pharmacy can't fill on that plan (OON / no such channel). */
+  channelByPlan: Record<string, PharmacyChannel | null>;
+}
+
+export interface CostMatrixCell {
+  scenarioKey: string;
+  planId: string;
+  channel: PharmacyChannel | null;
+  /** Channel is null on this plan — the pharmacy is out of network / unavailable. */
+  unavailable: boolean;
+  /** Sum of 30-day-normalized copays for covered, non-PRN meds. Null when unavailable or any such med is coinsurance-priced. */
+  estMonthlyCents: Cents | null;
+  /** A covered, non-PRN med had no cost row for this channel — the total understates. */
+  isPartial: boolean;
+  /** At least one covered, non-PRN med is coinsurance-priced (can't total to a dollar figure). */
+  hasCoinsurance: boolean;
+}
+
 // ── Matching ─────────────────────────────────────────────────────────────────
 
 const normalize = (s: string) =>
@@ -222,6 +248,18 @@ export function resolveChannel(
   }
 }
 
+/**
+ * Fallback partner for a channel: a plan with only a preferred (or only a
+ * standard) table prices the other request from what it has. Retail and mail
+ * never cross — a mail request never falls back to a retail table.
+ */
+const CHANNEL_FALLBACK: Record<PharmacyChannel, PharmacyChannel> = {
+  preferred_retail: "standard_retail",
+  standard_retail: "preferred_retail",
+  preferred_mail: "standard_mail",
+  standard_mail: "preferred_mail",
+};
+
 export function findTierCost(
   tierCosts: EngineTierCost[],
   tier: number,
@@ -230,14 +268,13 @@ export function findTierCost(
   const costTier = tierFromNumber(tier);
   const exact = tierCosts.find((c) => c.channel === channel && c.tier === costTier);
   if (exact) return exact;
-  // Plans without a preferred network fall back to their standard table (and vice versa).
-  const fallbackChannel: PharmacyChannel =
-    channel === "preferred_retail" ? "standard_retail" : "preferred_retail";
-  if (channel !== "mail_order") {
-    return tierCosts.find((c) => c.channel === fallbackChannel && c.tier === costTier) ?? null;
-  }
-  return null;
+  const fallbackChannel = CHANNEL_FALLBACK[channel];
+  return tierCosts.find((c) => c.channel === fallbackChannel && c.tier === costTier) ?? null;
 }
+
+/** A cost-sharing row normalized to a 30-day month (90-day mail ÷ 3). */
+const monthlyCopayCents = (cost: EngineTierCost): Cents | null =>
+  cost.copayCents == null ? null : Math.round(cost.copayCents * (30 / cost.daysSupply));
 
 // ── Orchestration ────────────────────────────────────────────────────────────
 
@@ -336,4 +373,90 @@ export function runAnalysis(
   }
 
   return { cells, summaries };
+}
+
+/**
+ * The cost matrix: each pharmacy scenario priced against every plan, reusing
+ * the coverage cells from runAnalysis (no re-matching). One CostMatrixCell per
+ * (scenario, plan) — the client's estimated monthly at that pharmacy on that
+ * plan. Pure and deterministic, same as runAnalysis.
+ */
+export function priceScenarios(
+  cells: CellResult[],
+  medications: EngineMedication[],
+  plans: EnginePlan[],
+  scenarios: PricingScenario[],
+): CostMatrixCell[] {
+  const prnById = new Map(medications.map((m) => [m.id, m.prn]));
+  const cellByKey = new Map(cells.map((c) => [`${c.medicationId}:${c.planId}`, c]));
+  const out: CostMatrixCell[] = [];
+
+  for (const scenario of scenarios) {
+    for (const plan of plans) {
+      const channel = scenario.channelByPlan[plan.id] ?? null;
+      if (!channel) {
+        out.push({
+          scenarioKey: scenario.key,
+          planId: plan.id,
+          channel: null,
+          unavailable: true,
+          estMonthlyCents: null,
+          isPartial: false,
+          hasCoinsurance: false,
+        });
+        continue;
+      }
+
+      let estMonthly: Cents = 0;
+      let hasCoinsurance = false;
+      let isPartial = false;
+
+      for (const med of medications) {
+        if (prnById.get(med.id)) continue; // PRN meds are not part of the monthly estimate
+        const cell = cellByKey.get(`${med.id}:${plan.id}`);
+        if (!cell || cell.tier == null) continue; // not covered / not on formulary
+        if (cell.coverage !== "covered" && cell.coverage !== "covered_equivalent") continue;
+
+        const cost = findTierCost(plan.tierCosts, cell.tier, channel);
+        const monthly = cost ? monthlyCopayCents(cost) : null;
+        if (monthly != null) estMonthly += monthly;
+        else if (cost?.coinsurancePct != null) hasCoinsurance = true;
+        else isPartial = true;
+      }
+
+      out.push({
+        scenarioKey: scenario.key,
+        planId: plan.id,
+        channel,
+        unavailable: false,
+        estMonthlyCents: hasCoinsurance ? null : estMonthly,
+        isPartial,
+        hasCoinsurance,
+      });
+    }
+  }
+
+  return out;
+}
+
+/** Retail network status → the retail channel it prices at (null = out of network). */
+export function retailChannelForStatus(status: NetworkStatus | null): PharmacyChannel | null {
+  switch (status) {
+    case "preferred":
+      return "preferred_retail";
+    case "standard":
+      return "standard_retail";
+    case "out_of_network":
+      return null;
+    case null:
+      return "standard_retail"; // unknown network → conservative default (flagged for confirmation upstream)
+  }
+}
+
+/** The mail channel a plan offers, preferring its preferred-mail table (e.g. CenterWell). */
+export function mailChannelForPlan(tierCosts: EngineTierCost[]): PharmacyChannel | null {
+  const channels = new Set(tierCosts.map((c) => c.channel));
+  if (channels.has("preferred_mail")) return "preferred_mail";
+  if (channels.has("standard_mail")) return "standard_mail";
+  return null;
 }
