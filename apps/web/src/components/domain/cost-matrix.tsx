@@ -20,8 +20,6 @@ export function CostMatrix({
   plans: ComparisonData["plans"];
   controls?: React.ReactNode;
 }) {
-  if (rows.length === 0) return null;
-
   const anyAssumed = rows.some((r) => r.cells.some((c) => c.assumed));
   const anyCoinsurance = rows.some((r) => r.cells.some((c) => c.hasCoinsurance));
 
@@ -38,6 +36,13 @@ export function CostMatrix({
         {controls}
       </div>
 
+      {rows.length === 0 ? (
+        <p className="px-4 py-8 text-center text-sm text-steel">
+          No pharmacies selected. Use <span className="font-semibold text-deepwater">Pharmacies</span>{" "}
+          above to add the client&rsquo;s pharmacies and compare their cost on each plan.
+        </p>
+      ) : (
+        <>
       <Table>
         <THead>
           <tr>
@@ -113,6 +118,8 @@ export function CostMatrix({
         ) : null}
         <p>* Estimate excludes drugs with no listed copay at that pharmacy.</p>
       </div>
+        </>
+      )}
     </Card>
   );
 }

@@ -441,6 +441,52 @@ function buildCostMatrix(
   });
 }
 
+export interface PharmacyOption {
+  id: string;
+  name: string;
+  city: string | null;
+  state: string | null;
+}
+
+export interface ComparablePharmacies {
+  options: PharmacyOption[];
+  selectedIds: string[];
+  locked: boolean;
+}
+
+/**
+ * The pharmacy-picker's data: the directory (scoped to the client's state) plus
+ * which pharmacies are currently on the analysis. selectedIds reflects the
+ * explicit analysis_pharmacies rows only — not the confirmed-pharmacy fallback.
+ */
+export async function getComparablePharmacies(
+  analysisId: string,
+): Promise<ComparablePharmacies | null> {
+  const db = getDb();
+  const analysis = await db.query.analyses.findFirst({
+    where: eq(analyses.id, analysisId),
+    columns: { status: true },
+    with: {
+      client: { columns: { state: true } },
+      pharmacies: { columns: { pharmacyId: true } },
+    },
+  });
+  if (!analysis) return null;
+
+  const state = analysis.client.state;
+  const options = await db.query.pharmacies.findMany({
+    where: state ? eq(pharmacies.state, state) : undefined,
+    columns: { id: true, name: true, city: true, state: true },
+    orderBy: (p, { asc }) => [asc(p.name)],
+  });
+
+  return {
+    options,
+    selectedIds: analysis.pharmacies.map((p) => p.pharmacyId),
+    locked: analysis.status === "approved" || analysis.status === "delivered",
+  };
+}
+
 export async function getComparison(analysisId: string): Promise<ComparisonData | null> {
   const inputs = await loadComparisonInputs(analysisId);
   if (!inputs) return null;

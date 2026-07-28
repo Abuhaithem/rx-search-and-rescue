@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import type { MatchMethod } from "@rxsr/core";
 import type { CellResult, PlanSummary } from "@rxsr/core/analysis";
-import { getComparison } from "@/server/queries/comparison";
+import { getComparison, getComparablePharmacies } from "@/server/queries/comparison";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Table, TBody, TCell, TH, THead, TRow } from "@/components/ui/table";
@@ -12,6 +12,7 @@ import { PlanSummaryCard } from "@/components/domain/plan-summary-card";
 import { RestrictionChip } from "@/components/domain/restriction-chip";
 import { CostMatrix } from "@/components/domain/cost-matrix";
 import { MailOrderToggle } from "./_components/mail-order-toggle";
+import { PharmacyPicker } from "./_components/pharmacy-picker";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -69,7 +70,10 @@ export default async function ComparisonPage({
   params: Promise<{ analysisId: string }>;
 }) {
   const { analysisId } = await params;
-  const comparison = await getComparison(analysisId);
+  const [comparison, pharmacyChoices] = await Promise.all([
+    getComparison(analysisId),
+    getComparablePharmacies(analysisId),
+  ]);
   if (!comparison) notFound();
   if (comparison.plans.length === 0) redirect(`/analysis/${analysisId}/plans`);
 
@@ -132,7 +136,19 @@ export default async function ComparisonPage({
       <CostMatrix
         rows={costMatrix}
         plans={plans}
-        controls={<MailOrderToggle analysisId={analysisId} checked={analysis.includeMailOrder} />}
+        controls={
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <MailOrderToggle analysisId={analysisId} checked={analysis.includeMailOrder} />
+            {pharmacyChoices ? (
+              <PharmacyPicker
+                analysisId={analysisId}
+                options={pharmacyChoices.options}
+                selectedIds={pharmacyChoices.selectedIds}
+                locked={pharmacyChoices.locked}
+              />
+            ) : null}
+          </div>
+        }
       />
 
       <Card className="overflow-hidden">

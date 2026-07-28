@@ -464,11 +464,13 @@ await db.insert(s.analysisPlans).values([
   { analysisId: analysis!.id, planId: humanaValue!.id, position: 1, isCurrent: true },
 ]);
 
-await db.insert(s.analysisPharmacies).values({
-  analysisId: analysis!.id,
-  pharmacyId: drugStore!.id,
-  position: 0,
-});
+// Compare all three Blaine-County pharmacies so the cost matrix is multi-row
+// out of the box (Albertsons has no True Blue network row → assumed/amber).
+await db.insert(s.analysisPharmacies).values([
+  { analysisId: analysis!.id, pharmacyId: drugStore!.id, position: 0 },
+  { analysisId: analysis!.id, pharmacyId: atkinsons!.id, position: 1 },
+  { analysisId: analysis!.id, pharmacyId: albertsons!.id, position: 2 },
+]);
 
 console.log("Seeded 2 plans, 3 pharmacies, 3 clients (Healy/Smith/Gonzalez), 1 analysis.");
 process.exit(0);
