@@ -36,7 +36,9 @@ import {
   pharmacyNote,
 } from "./display";
 
-const AGENCY_NAME = process.env.REPORT_AGENCY_NAME ?? "Rx Search & Rescue";
+// Client-facing byline. "Rx Search & Rescue" is the internal program name and
+// must not appear on the report; default to the agency, override via env.
+const AGENCY_NAME = process.env.REPORT_AGENCY_NAME ?? "Insurance Specialists Group";
 
 const DISCLAIMER =
   "This comparison is based on each plan's published formulary and Summary of Benefits " +

@@ -11,6 +11,7 @@ import { PageHeader } from "@/components/domain/page-header";
 import { PlanSummaryCard } from "@/components/domain/plan-summary-card";
 import { RestrictionChip } from "@/components/domain/restriction-chip";
 import { CostMatrix } from "@/components/domain/cost-matrix";
+import { WorkflowNav } from "@/components/domain/workflow-nav";
 import { MailOrderToggle } from "./_components/mail-order-toggle";
 import { PharmacyPicker } from "./_components/pharmacy-picker";
 import { cn } from "@/lib/utils";
@@ -98,8 +99,8 @@ export default async function ComparisonPage({
 
   return (
     <div className="space-y-6">
+      <WorkflowNav analysisId={analysisId} clientId={client.id} current="comparison" />
       <PageHeader
-        backHref={`/analysis/${analysisId}/plans`}
         title={`Comparison — ${client.fullName} · ${analysis.planYear}`}
         actions={
           <>
@@ -128,6 +129,8 @@ export default async function ComparisonPage({
             medicationCount={planColumn.summary.totalCount}
             restrictionsLabel={summaryRestrictionsLabel(planColumn.summary)}
             estimatedMonthlyCents={planColumn.summary.estMonthlyCents}
+            rxDeductibleCents={planColumn.plan.rxDeductibleCents}
+            deductibleTiers={planColumn.plan.deductibleTiers}
             bestCoverage={planColumn.plan.id === bestPlanId}
           />
         ))}

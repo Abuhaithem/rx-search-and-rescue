@@ -135,7 +135,7 @@ describe("renderDocx", () => {
     const buffer = await renderDocx(fixtureModel);
     const xml = extractZipEntry(buffer, "word/document.xml");
     const expected = [
-      "Medicare Analysis — Jane Bentley",
+      "Prescription Drug Plan Analysis — Jane Bentley",
       "Prepared by Brandi Agent · Test Agency · Plan year 2026 · 2026-07-25",
       "The Drug Store — you will receive Standard Pricing on the MyCare 24 plan.",
       "Dr. Smith is in network on both plans.",

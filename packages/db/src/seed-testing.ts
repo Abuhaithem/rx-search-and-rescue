@@ -178,7 +178,7 @@ const [trueBlue33, humanaValue] = await db
       name: "Humana Value Rx Plan (PDP)",
       contractPlanId: "S5884-210",
       premiumCents: 1940,
-      rxDeductibleCents: 60100, // Tiers 3-5, per SoB
+      rxDeductibleCents: 61500, // $615, Tiers 3-5 (SoB p.4)
       deductibleTiers: [3, 4, 5],
     },
   ])

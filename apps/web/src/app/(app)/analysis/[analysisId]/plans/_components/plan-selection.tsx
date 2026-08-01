@@ -7,6 +7,7 @@ import { runComparison, selectPlans } from "@/server/actions/analysis";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/sonner";
 import { PageHeader } from "@/components/domain/page-header";
+import { WorkflowNav } from "@/components/domain/workflow-nav";
 import { PlanCard } from "@/components/domain/plan-card";
 
 export interface SelectablePlan {
@@ -98,8 +99,8 @@ export function PlanSelection({
 
   return (
     <div className="space-y-6">
+      <WorkflowNav analysisId={analysisId} clientId={clientId} current="plans" />
       <PageHeader
-        backHref={`/intake/${clientId}`}
         title={`Select Plans — ${clientName}`}
         actions={
           <Button

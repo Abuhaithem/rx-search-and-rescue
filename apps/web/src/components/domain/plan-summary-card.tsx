@@ -3,9 +3,9 @@ import { formatUsd } from "@/components/domain/format";
 import { cn } from "@/lib/utils";
 
 /**
- * Comparison-header strip card (screen 4): plan identity, pharmacy pricing
- * line, and the COVERED / RESTRICTIONS / EST. MONTHLY mono stats. The
- * BEST COVERAGE badge is computed upstream — never decorative here.
+ * Comparison-header strip card (screen 4): plan identity, deductible, pharmacy
+ * pricing line, and the COVERED / RESTRICTIONS / EST. MONTHLY mono stats. The
+ * "Proposed plan" badge is computed upstream — never decorative here.
  */
 
 interface PlanSummaryCardProps {
@@ -20,10 +20,17 @@ interface PlanSummaryCardProps {
   restrictionsLabel?: string;
   /** null when the estimate cannot be computed for this channel. */
   estimatedMonthlyCents: Cents | null;
+  /** Plan's annual Rx deductible; null when unknown. */
+  rxDeductibleCents?: Cents | null;
+  /** Tiers the deductible applies to before cost sharing, e.g. [3,4,5]. */
+  deductibleTiers?: number[];
   /** Set only by the analysis engine's comparison — never by hand. */
   bestCoverage?: boolean;
   className?: string;
 }
+
+const tierList = (tiers: number[]): string =>
+  [...tiers].sort((a, b) => a - b).join(", ");
 
 function PlanSummaryCard({
   planName,
@@ -34,6 +41,8 @@ function PlanSummaryCard({
   medicationCount,
   restrictionsLabel,
   estimatedMonthlyCents,
+  rxDeductibleCents,
+  deductibleTiers,
   bestCoverage = false,
   className,
 }: PlanSummaryCardProps) {
@@ -53,11 +62,28 @@ function PlanSummaryCard({
         <div className="text-sm font-semibold leading-tight text-deepwater">{planName}</div>
         {bestCoverage ? (
           <span className="shrink-0 rounded-chip bg-covered-soft px-2 py-0.5 font-mono text-[10px] font-medium uppercase tracking-[0.1em] text-covered">
-            Best coverage
+            Proposed plan
           </span>
         ) : null}
       </div>
       <div className="mt-0.5 text-xs text-steel">{meta}</div>
+
+      {rxDeductibleCents != null ? (
+        <div className="mt-2 rounded-chip bg-fog px-2 py-1 text-xs text-steel">
+          {rxDeductibleCents === 0 ? (
+            <span className="font-semibold text-deepwater">No Rx deductible</span>
+          ) : (
+            <>
+              <span className="font-semibold text-deepwater">
+                {formatUsd(rxDeductibleCents)} Rx deductible
+              </span>
+              {deductibleTiers && deductibleTiers.length > 0 ? (
+                <> · Tiers {tierList(deductibleTiers)} paid in full until met</>
+              ) : null}
+            </>
+          )}
+        </div>
+      ) : null}
 
       <div className="mt-3 flex items-end gap-6">
         <div>

@@ -221,7 +221,7 @@ export function buildDocument(model: ReportModel): Document {
 
   children.push(
     new Paragraph({
-      children: [bodyRun(`Medicare Analysis — ${model.clientName}`, { bold: true, size: 32, color: DEEPWATER })],
+      children: [bodyRun(`Prescription Drug Plan Analysis — ${model.clientName}`, { bold: true, size: 32, color: DEEPWATER })],
       spacing: { after: 80 },
     }),
     new Paragraph({
@@ -291,7 +291,7 @@ export function buildDocument(model: ReportModel): Document {
 
   return new Document({
     creator: model.agencyName,
-    title: `Medicare Analysis — ${model.clientName}`,
+    title: `Prescription Drug Plan Analysis — ${model.clientName}`,
     styles: {
       default: { document: { run: { font: BODY_FONT, size: 20, color: INK } } },
     },

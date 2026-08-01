@@ -19,10 +19,12 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/sonner";
 import { PageHeader } from "@/components/domain/page-header";
+import { WorkflowNav } from "@/components/domain/workflow-nav";
 import { cn } from "@/lib/utils";
 
 interface ReportEditorProps {
   analysisId: string;
+  clientId: string;
   model: ReportModel;
   status: AnalysisStatus;
 }
@@ -49,7 +51,7 @@ function StatusBadge({ status }: { status: AnalysisStatus }) {
   );
 }
 
-export function ReportEditor({ analysisId, model, status }: ReportEditorProps) {
+export function ReportEditor({ analysisId, clientId, model, status }: ReportEditorProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
@@ -162,8 +164,8 @@ export function ReportEditor({ analysisId, model, status }: ReportEditorProps) {
 
   return (
     <div className="space-y-6">
+      <WorkflowNav analysisId={analysisId} clientId={clientId} current="report" />
       <PageHeader
-        backHref={`/analysis/${analysisId}`}
         title={`Report — ${model.clientName}`}
         meta={<StatusBadge status={status} />}
         actions={
@@ -195,7 +197,7 @@ export function ReportEditor({ analysisId, model, status }: ReportEditorProps) {
             <div className="space-y-5 rounded-card border border-mist/60 p-6">
               <div>
                 <h2 className="font-display text-lg font-extrabold text-deepwater">
-                  Medicare Analysis — {model.clientName}
+                  Prescription Drug Plan Analysis — {model.clientName}
                 </h2>
                 <p className="mt-0.5 text-xs text-steel">
                   {model.agencyName} · Plan year {model.planYear}

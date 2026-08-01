@@ -17,5 +17,12 @@ export default async function ReportPage({
   ]);
   if (!model || !comparison) notFound();
 
-  return <ReportEditor analysisId={analysisId} model={model} status={comparison.analysis.status} />;
+  return (
+    <ReportEditor
+      analysisId={analysisId}
+      clientId={comparison.client.id}
+      model={model}
+      status={comparison.analysis.status}
+    />
+  );
 }
