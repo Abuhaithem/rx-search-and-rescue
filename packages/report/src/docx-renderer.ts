@@ -280,13 +280,21 @@ export function buildDocument(model: ReportModel): Document {
     );
   }
 
-  if (model.disclaimer) {
+  if (model.disclaimers.length > 0) {
     children.push(
       new Paragraph({
-        children: [bodyRun(model.disclaimer, { size: 14, color: STEEL })],
-        spacing: { before: 240 },
+        children: [bodyRun("Important disclosures", { bold: true, size: 16, color: STEEL })],
+        spacing: { before: 240, after: 60 },
       }),
     );
+    for (const disclaimer of model.disclaimers) {
+      children.push(
+        new Paragraph({
+          children: [bodyRun(disclaimer, { size: 14, color: STEEL })],
+          spacing: { after: 80 },
+        }),
+      );
+    }
   }
 
   return new Document({

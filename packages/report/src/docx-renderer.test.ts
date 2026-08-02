@@ -114,7 +114,7 @@ const fixtureModel: ReportModel = {
   ],
   deductibleFootnote:
     "RX Deductible applies to Tier 3, Tier 4 and Tier 5 medications on all plans",
-  disclaimer: "Cost sharing shown is the plan's tier copay or coinsurance, not a pharmacy price.",
+  disclaimers: ["Cost sharing shown is the plan's tier copay or coinsurance, not a pharmacy price."],
 };
 
 describe("renderDocx", () => {
@@ -159,6 +159,8 @@ describe("renderDocx", () => {
       "30 DAY In Network",
       "Covered Insulin",
       "RX Deductible applies to Tier 3, Tier 4 and Tier 5 medications on all plans",
+      "Important disclosures",
+      "tier copay or coinsurance, not a pharmacy price.",
     ];
     for (const text of expected) {
       expect(xml).toContain(text);

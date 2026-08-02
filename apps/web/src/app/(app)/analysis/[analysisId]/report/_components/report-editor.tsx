@@ -382,7 +382,18 @@ export function ReportEditor({ analysisId, clientId, model, status }: ReportEdit
               {model.deductibleFootnote ? (
                 <p className="text-xs text-steel">{model.deductibleFootnote}</p>
               ) : null}
-              {model.disclaimer ? <p className="text-[11px] text-steel">{model.disclaimer}</p> : null}
+              {model.disclaimers.length > 0 ? (
+                <div className="space-y-1.5 border-t border-mist/60 pt-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-steel">
+                    Important disclosures
+                  </p>
+                  {model.disclaimers.map((disclaimer, index) => (
+                    <p key={index} className="text-[11px] leading-relaxed text-steel">
+                      {disclaimer}
+                    </p>
+                  ))}
+                </div>
+              ) : null}
             </div>
             <p className="mt-2 text-xs text-steel">
               Double-click any grid cell to edit its display text. Edited cells show a dot — click ×

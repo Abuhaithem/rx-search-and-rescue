@@ -79,7 +79,8 @@ export interface ReportModel {
   benefits: ReportPlanBenefits[];
   /** e.g. "RX Deductible applies to Tier 3, Tier 4 and Tier 5 medications on all plans." */
   deductibleFootnote: string | null;
-  disclaimer: string | null;
+  /** Client-facing legal/coverage disclaimers, one paragraph per entry. */
+  disclaimers: string[];
 }
 
 export interface ReportOverrideEntry {

@@ -42,7 +42,7 @@ const makeModel = (): ReportModel => ({
   costMatrix: null,
   benefits: [],
   deductibleFootnote: null,
-  disclaimer: null,
+  disclaimers: [],
 });
 
 describe("applyOverrides", () => {

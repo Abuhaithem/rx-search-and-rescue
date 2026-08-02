@@ -40,10 +40,18 @@ import {
 // must not appear on the report; default to the agency, override via env.
 const AGENCY_NAME = process.env.REPORT_AGENCY_NAME ?? "Insurance Specialists Group";
 
-const DISCLAIMER =
+const DISCLAIMERS: string[] = [
   "This comparison is based on each plan's published formulary and Summary of Benefits " +
-  "for the plan year shown. Cost sharing shown is the plan's tier copay or coinsurance, " +
-  "not a pharmacy price. Confirm final costs with the carrier before enrolling.";
+    "for the plan year shown. Cost sharing shown is the plan's tier copay or coinsurance, " +
+    "not a pharmacy price. Confirm final costs with the carrier before enrolling.",
+  "Prescription drug formularies, pharmacy networks, and medication costs can change each " +
+    "year. We recommend reviewing your medications annually during Medicare Open Enrollment " +
+    "to ensure your current plan continues to meet your needs.",
+  "Covered medications (formulary), pharmacy networks, prior authorization requirements, " +
+    "quantity limits, and step therapy requirements may change. The inclusion of a medication " +
+    "on a plan's formulary does not guarantee coverage. Coverage may require prior " +
+    "authorization, step therapy, or quantity limits.",
+];
 
 function formatMatrixCellDisplay(cell: CostMatrixCell): string {
   if (cell.unavailable) return "Out of Network";
@@ -260,7 +268,7 @@ export async function buildReportModel(analysisId: string): Promise<ReportModel 
         deductibleTiers: ap.plan.deductibleTiers,
       })),
     ),
-    disclaimer: DISCLAIMER,
+    disclaimers: DISCLAIMERS,
   };
 
   return applyOverrides(
