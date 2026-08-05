@@ -41,7 +41,14 @@ export const pharmacyDirectoryExtractionSchema = z.object({
       pharmacyName: z.string().min(1),
       address: z.string().nullable(),
       zip: z.string().nullable(),
-      status: z.enum(["preferred", "standard"]),
+      /**
+       * Carrier cost-share vocabulary varies ("preferred cost share",
+       * "Level 1", "$ saver", plain "in network"…). "unspecified" means the
+       * directory names no tier — the job maps it conservatively.
+       */
+      status: z.enum(["preferred", "standard", "unspecified"]),
+      /** Verbatim cost-share wording from the document, for audit. */
+      statusLabel: z.string().nullable(),
     }),
   ),
 });
@@ -207,12 +214,13 @@ const DIRECTORY_JSON_SCHEMA: JsonObjectSchema = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["pharmacyName", "address", "zip", "status"],
+        required: ["pharmacyName", "address", "zip", "status", "statusLabel"],
         properties: {
           pharmacyName: { type: "string", minLength: 1 },
           address: { type: ["string", "null"] },
           zip: { type: ["string", "null"], pattern: "^\\d{5}" },
-          status: { type: "string", enum: ["preferred", "standard"] },
+          status: { type: "string", enum: ["preferred", "standard", "unspecified"] },
+          statusLabel: { type: ["string", "null"] },
         },
       },
     },
@@ -273,7 +281,14 @@ export const formularyLegendSpec: ExtractionSpec<FormularyLegendExtraction> = {
 export const pharmacyDirectorySpec: ExtractionSpec<PharmacyDirectoryExtraction> = {
   toolName: "record_pharmacy_directory",
   description: "Record pharmacy rows extracted from directory text.",
-  systemPrompt: `You extract pharmacy rows from a Medicare plan pharmacy directory. For each pharmacy listed in the provided text, record its name, street address (single line, null if absent), 5-digit ZIP (null if absent), and network status: "preferred" when the directory marks it preferred/preferred cost-sharing, otherwise "standard". Never invent rows.`,
+  systemPrompt: `You extract pharmacy rows from a Medicare plan pharmacy directory. For each pharmacy listed in the provided text, record its name, street address (single line, null if absent), and 5-digit ZIP (null if absent).
+
+Classify network status — carriers use DIFFERENT vocabulary for the same two tiers, so normalize by meaning, not exact wording:
+- "preferred": the LOWER cost-share tier. Wordings seen across carriers: "preferred", "preferred cost share/sharing", "preferred retail/network pharmacy", "$ saver"/"savings pharmacy", "select network", "Level 1"/"Tier 1 cost sharing" (when the document defines two levels and 1 is cheaper).
+- "standard": the regular in-network tier. Wordings: "standard", "standard cost share", "non-preferred", "network cost share", "Level 2"/"Tier 2 cost sharing".
+- "unspecified": the pharmacy is listed as in-network but the document names NO cost-share tier (some plans have single-tier networks), or the wording is genuinely ambiguous. Never guess "preferred" without tier language.
+
+Always copy the document's verbatim cost-share wording into statusLabel (null when there is none). Never invent rows.`,
   jsonSchema: DIRECTORY_JSON_SCHEMA,
   parse: (input) => pharmacyDirectoryExtractionSchema.parse(input),
 };

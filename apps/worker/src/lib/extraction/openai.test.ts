@@ -125,7 +125,13 @@ describe("extractPharmacyDirectoryRows", () => {
   it("sends text-only input and validates rows", async () => {
     const { client, requests } = fakeClient({
       rows: [
-        { pharmacyName: "The Drug Store", address: null, zip: "83333", status: "standard" },
+        {
+          pharmacyName: "The Drug Store",
+          address: null,
+          zip: "83333",
+          status: "standard",
+          statusLabel: "In network - Standard cost share",
+        },
       ],
     });
     const result = await createOpenAIProvider({ client }).extractPharmacyDirectoryRows(

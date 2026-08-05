@@ -4,7 +4,7 @@
  * matching against known + NPPES pharmacies, and plan_pharmacy_networks
  * upserts with source "directory".
  */
-import { planPharmacyNetworks } from "@rxsr/db";
+import { planPharmacyNetworks, sql } from "@rxsr/db";
 import { matchPharmacy, type ParsedPharmacyText } from "@rxsr/core/pharmacy";
 import type { PharmacyDirectoryJob } from "../queues";
 import { markJobDone, markJobFailed, markJobRunning, updateJobProgress } from "../lib/db";
@@ -32,6 +32,7 @@ export async function runPharmacyDirectory(
 
     let linked = 0;
     let skipped = 0;
+    let unspecified = 0;
 
     for (let start = 0; start < textLayer.totalPages; start += PAGES_PER_CHUNK) {
       const end = Math.min(start + PAGES_PER_CHUNK, textLayer.totalPages);
@@ -74,18 +75,26 @@ export async function runPharmacyDirectory(
           continue;
         }
 
+        // Carriers name cost-share tiers inconsistently; "unspecified" means the
+        // directory listed the pharmacy in-network with no tier language. Map it
+        // to "standard" — the conservative choice that never overstates savings.
+        const status = row.status === "unspecified" ? "standard" : row.status;
+        if (row.status === "unspecified") unspecified += 1;
+
         const pharmacyId = await ensurePharmacyId(db, best.candidate, pool);
         await db
           .insert(planPharmacyNetworks)
           .values({
             planId: job.planId,
             pharmacyId,
-            status: row.status,
+            status,
             source: "directory",
           })
           .onConflictDoUpdate({
             target: [planPharmacyNetworks.planId, planPharmacyNetworks.pharmacyId],
-            set: { status: row.status, source: "directory" },
+            set: { status, source: "directory" },
+            // Agent-set rows outrank every automated source (same rule as CMS import).
+            setWhere: sql`${planPharmacyNetworks.source} <> 'agent'`,
           });
         linked += 1;
       }
@@ -94,7 +103,7 @@ export async function runPharmacyDirectory(
     await markJobDone(db, job.ingestionJobId, {
       page: textLayer.totalPages,
       totalPages: textLayer.totalPages,
-      message: `Linked ${linked} pharmacies (${skipped} rows skipped as unmatched)`,
+      message: `Linked ${linked} pharmacies (${skipped} unmatched skipped, ${unspecified} without tier language recorded as standard)`,
     });
   } catch (error) {
     await markJobFailed(db, job.ingestionJobId, error);

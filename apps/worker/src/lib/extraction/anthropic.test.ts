@@ -207,6 +207,7 @@ describe("extractPharmacyDirectoryRows", () => {
             address: "91 E Croy St",
             zip: "83333",
             status: "preferred",
+            statusLabel: "Preferred cost sharing",
           },
         ],
       },

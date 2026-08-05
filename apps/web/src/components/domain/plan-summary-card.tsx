@@ -61,7 +61,7 @@ function PlanSummaryCard({
       <div className="flex items-start justify-between gap-3">
         <div className="text-sm font-semibold leading-tight text-deepwater">{planName}</div>
         {bestCoverage ? (
-          <span className="shrink-0 rounded-chip bg-covered-soft px-2 py-0.5 font-mono text-[10px] font-medium uppercase tracking-[0.1em] text-covered">
+          <span className="shrink-0 rounded-chip bg-covered-soft px-2 py-0.5 font-mono text-[10px] font-medium uppercase tracking-widest text-covered">
             Proposed plan
           </span>
         ) : null}
