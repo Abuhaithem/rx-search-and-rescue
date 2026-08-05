@@ -109,6 +109,18 @@ export const planUpsertSchema = z
     rxDeductibleCents: z.number().int().min(0).nullish(),
     deductibleTiers: z.array(z.number().int().min(1).max(6)).optional(),
     curated: z.boolean().optional(),
+    /** Per-plan SoB tier display labels; empty strings are dropped on save. */
+    tierLabels: z
+      .object({
+        t1: z.string().max(60).optional(),
+        t2: z.string().max(60).optional(),
+        t3: z.string().max(60).optional(),
+        t4: z.string().max(60).optional(),
+        t5: z.string().max(60).optional(),
+        t6: z.string().max(60).optional(),
+        insulin: z.string().max(60).optional(),
+      })
+      .optional(),
   })
   .refine((p) => p.carrierId != null || p.carrierName != null, {
     message: "carrierId or carrierName is required",

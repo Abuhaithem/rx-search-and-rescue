@@ -4,6 +4,7 @@ import {
   TIER_LABELS,
   applyOverrides,
   centsDisplay,
+  tierLabel,
   type ReportModel,
   type ReportOverrideEntry,
 } from "./index";
@@ -178,5 +179,24 @@ describe("TIER_LABELS", () => {
       t6: "T6",
       insulin: "Covered Insulin",
     });
+  });
+});
+
+describe("tierLabel", () => {
+  it("prefers the plan's own SoB label", () => {
+    expect(tierLabel("t1", { t1: "Preferred Generic" })).toBe("Preferred Generic");
+    expect(tierLabel("t3", { t3: "Preferred Brand" })).toBe("Preferred Brand");
+    expect(tierLabel("t6", { t6: "Select Care" })).toBe("Select Care");
+  });
+
+  it("falls back per tier when the plan has no label for it", () => {
+    expect(tierLabel("t2", { t1: "Preferred Generic" })).toBe("T2");
+    expect(tierLabel("insulin", {})).toBe("Covered Insulin");
+    expect(tierLabel("t4")).toBe("T4");
+  });
+
+  it("treats blank/whitespace labels as absent", () => {
+    expect(tierLabel("t1", { t1: "" })).toBe("T1");
+    expect(tierLabel("t1", { t1: "   " })).toBe("T1");
   });
 });

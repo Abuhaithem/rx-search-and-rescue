@@ -1,0 +1,1 @@
+ALTER TABLE "plans" ADD COLUMN "tier_labels" jsonb DEFAULT '{}'::jsonb NOT NULL;

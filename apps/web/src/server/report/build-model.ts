@@ -236,6 +236,7 @@ export async function buildReportModel(analysisId: string): Promise<ReportModel 
       premiumCents: ap.plan.premiumCents,
       rxDeductibleCents: ap.plan.rxDeductibleCents,
       tierCosts: (tierCostsByPlan.get(ap.planId) ?? []).map((tc) => ({ ...tc })),
+      tierLabels: ap.plan.tierLabels,
     }),
   );
 

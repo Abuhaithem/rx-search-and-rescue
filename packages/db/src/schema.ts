@@ -190,6 +190,15 @@ export const plans = pgTable(
     deductibleTiers: integer("deductible_tiers").array().notNull().default([]),
     /** Agency curation: only curated plans surface by default on plan select. */
     curated: boolean("curated").notNull().default(true),
+    /**
+     * Per-plan tier DISPLAY labels from the Summary of Benefits (e.g. t1 →
+     * "Preferred Generic"). Presentation metadata only — tier identity stays
+     * t1..t6/insulin everywhere (engine, formularies, CMS import).
+     */
+    tierLabels: jsonb("tier_labels")
+      .$type<Partial<Record<"t1" | "t2" | "t3" | "t4" | "t5" | "t6" | "insulin", string>>>()
+      .notNull()
+      .default({}),
     sobSourcePath: text("sob_source_path"), // Summary of Benefits PDF in Storage
     pharmacyDirectoryPath: text("pharmacy_directory_path"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

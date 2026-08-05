@@ -122,6 +122,7 @@ export const DEFAULT_DEDUCTIBLE_FOOTNOTE = (tiers: number[]): string | null =>
 export const centsDisplay = (cents: Cents): string =>
   `$${(cents / 100).toFixed(cents % 100 === 0 ? 0 : 2)}`;
 
+/** FALLBACK tier labels; plans may carry their own SoB wording (tierLabel). */
 export const TIER_LABELS: Record<CostTier, string> = {
   t1: "T1",
   t2: "T2",
@@ -131,3 +132,12 @@ export const TIER_LABELS: Record<CostTier, string> = {
   t6: "T6",
   insulin: "Covered Insulin",
 };
+
+/** Per-plan tier display labels (plans.tierLabels). */
+export type PlanTierLabels = Partial<Record<CostTier, string>>;
+
+/** The plan's own SoB label when present (non-blank), else the fallback. */
+export function tierLabel(tier: CostTier, planLabels?: PlanTierLabels): string {
+  const custom = planLabels?.[tier]?.trim();
+  return custom ? custom : TIER_LABELS[tier];
+}

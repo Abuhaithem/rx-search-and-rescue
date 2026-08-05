@@ -256,6 +256,15 @@ export async function upsertPlan(
     const db = getDb();
     const planId = await db.transaction(async (tx) => {
       const carrierId = input.carrierId ?? (await resolveCarrierId(tx, input.carrierName!));
+      // Blank label entries mean "use the default" — drop them on save.
+      const tierLabels =
+        input.tierLabels === undefined
+          ? undefined
+          : Object.fromEntries(
+              Object.entries(input.tierLabels)
+                .map(([tier, label]) => [tier, label?.trim() ?? ""])
+                .filter(([, label]) => label !== ""),
+            );
       const values = {
         carrierId,
         formularyId: input.formularyId ?? null,
@@ -266,6 +275,7 @@ export async function upsertPlan(
         rxDeductibleCents: input.rxDeductibleCents ?? null,
         deductibleTiers: input.deductibleTiers ?? [],
         curated: input.curated ?? true,
+        ...(tierLabels !== undefined ? { tierLabels } : {}),
       };
 
       let id: string;

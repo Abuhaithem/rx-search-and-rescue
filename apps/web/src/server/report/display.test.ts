@@ -153,6 +153,40 @@ describe("buildPlanBenefits", () => {
       { label: "Covered Insulin", values: ["—", "$35"] },
     ]);
   });
+
+  it("uses the plan's own SoB tier labels and falls back per tier", () => {
+    const benefits = buildPlanBenefits({
+      planName: "True Blue Rx 33",
+      carrierName: "Blue Cross of Idaho",
+      premiumCents: 0,
+      rxDeductibleCents: null,
+      tierCosts: [
+        tc("standard_retail", "t1", 100),
+        tc("standard_retail", "t3", 4700),
+        tc("standard_retail", "t6", 0),
+        tc("standard_retail", "insulin", 3500),
+      ],
+      tierLabels: { t1: "Preferred Generic", t3: "Preferred Brand", t6: "Select Care" },
+    });
+    expect(benefits.tierRows.map((r) => r.label)).toEqual([
+      "Preferred Generic",
+      "Preferred Brand",
+      "Select Care",
+      "Covered Insulin", // no plan label → fallback
+    ]);
+  });
+
+  it("ignores blank plan labels (falls back)", () => {
+    const benefits = buildPlanBenefits({
+      planName: "P",
+      carrierName: "C",
+      premiumCents: null,
+      rxDeductibleCents: null,
+      tierCosts: [tc("standard_retail", "t1", 100)],
+      tierLabels: { t1: "   " },
+    });
+    expect(benefits.tierRows[0]?.label).toBe("T1");
+  });
 });
 
 describe("pharmacyNote", () => {

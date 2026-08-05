@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "@/components/ui/sonner";
 import { Table, TBody, TCell, TH, THead, TRow } from "@/components/ui/table";
 import { upsertPlan, upsertTierCosts } from "@/server/actions/admin";
-import type { TierCostRowInput } from "@/server/schemas";
+import type { PlanUpsertInput, TierCostRowInput } from "@/server/schemas";
 import type { PlanCatalogRow } from "@/server/queries/plans";
 import { centsToDollarInput, parseDollarsToCents } from "./money";
 import { TierChecklist } from "./tier-checklist";
@@ -75,6 +75,10 @@ export function PlanEditor({ row }: { row: PlanCatalogRow }) {
   const [grid, setGrid] = useState<Record<string, string>>(() =>
     gridFromCatalog(row.tierCosts),
   );
+  // Display labels only — tier identity stays t1..t6/insulin.
+  const [tierLabels, setTierLabels] = useState<Record<string, string>>(() => ({
+    ...plan.tierLabels,
+  }));
   const [isPending, startTransition] = useTransition();
 
   function handleSave() {
@@ -107,6 +111,12 @@ export function PlanEditor({ row }: { row: PlanCatalogRow }) {
       }
     }
 
+    const cleanedTierLabels: NonNullable<PlanUpsertInput["tierLabels"]> = {};
+    for (const tier of TIERS) {
+      const label = (tierLabels[tier.tier] ?? "").trim();
+      if (label !== "") cleanedTierLabels[tier.tier] = label;
+    }
+
     startTransition(async () => {
       const metaResult = await upsertPlan({
         id: plan.id,
@@ -119,6 +129,7 @@ export function PlanEditor({ row }: { row: PlanCatalogRow }) {
         rxDeductibleCents,
         deductibleTiers,
         curated: plan.curated,
+        tierLabels: cleanedTierLabels,
       });
       if (!metaResult.ok) {
         toast.error(metaResult.error);
@@ -200,7 +211,21 @@ export function PlanEditor({ row }: { row: PlanCatalogRow }) {
                   <TH>Pharmacy channel</TH>
                   {TIERS.map((tier) => (
                     <TH key={tier.tier} className="w-20">
-                      {tier.label}
+                      <div className="flex flex-col gap-1 py-1">
+                        <span>{tier.label}</span>
+                        <Input
+                          aria-label={`${tier.label} display label`}
+                          placeholder={tier.label}
+                          className="h-7 w-16 px-1.5 text-[11px] font-normal"
+                          value={tierLabels[tier.tier] ?? ""}
+                          onChange={(event) =>
+                            setTierLabels((previous) => ({
+                              ...previous,
+                              [tier.tier]: event.target.value,
+                            }))
+                          }
+                        />
+                      </div>
                     </TH>
                   ))}
                 </TRow>

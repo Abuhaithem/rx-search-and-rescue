@@ -8,7 +8,8 @@ import type { Cents, CostTier, CoverageStatus, NetworkStatus, PharmacyChannel } 
 import {
   centsDisplay,
   DEFAULT_DEDUCTIBLE_FOOTNOTE,
-  TIER_LABELS,
+  tierLabel,
+  type PlanTierLabels,
   type ReportPlanBenefits,
   type ReportTierRow,
 } from "@rxsr/core/report-model";
@@ -109,6 +110,7 @@ export function buildChannelColumns(
 export function buildTierRows(
   tierCosts: BenefitTierCost[],
   channels: PharmacyChannel[],
+  planTierLabels?: PlanTierLabels,
 ): ReportTierRow[] {
   const rows: ReportTierRow[] = [];
   for (const tier of TIER_ORDER) {
@@ -117,7 +119,7 @@ export function buildTierRows(
     );
     if (perChannel.every((c) => c == null)) continue;
     rows.push({
-      label: TIER_LABELS[tier],
+      label: tierLabel(tier, planTierLabels),
       values: perChannel.map((cost) => {
         if (!cost) return "—";
         if (cost.copayCents != null) return centsDisplay(cost.copayCents);
@@ -135,6 +137,8 @@ export function buildPlanBenefits(input: {
   premiumCents: Cents | null;
   rxDeductibleCents: Cents | null;
   tierCosts: BenefitTierCost[];
+  /** Per-plan SoB tier labels; fallback T1.. when absent. */
+  tierLabels?: PlanTierLabels;
 }): ReportPlanBenefits {
   const { channels, headers } = buildChannelColumns(input.tierCosts);
   return {
@@ -144,7 +148,7 @@ export function buildPlanBenefits(input: {
     rxDeductible: input.rxDeductibleCents == null ? "—" : formatCents(input.rxDeductibleCents),
     channelHeaders: headers,
     channels,
-    tierRows: buildTierRows(input.tierCosts, channels),
+    tierRows: buildTierRows(input.tierCosts, channels, input.tierLabels),
   };
 }
 

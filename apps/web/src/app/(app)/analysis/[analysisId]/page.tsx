@@ -79,6 +79,16 @@ export default async function ComparisonPage({
   if (comparison.plans.length === 0) redirect(`/analysis/${analysisId}/plans`);
 
   const { client, plans, grid, primaryPharmacy, costMatrix, analysis, entryProvenance } = comparison;
+
+  // Per-plan SoB tier label for tooltips; identity stays the numeric tier.
+  const planTierLabel = (planId: string, tier: number): string | null => {
+    const labels = plans.find((p) => p.plan.id === planId)?.plan.tierLabels;
+    const label =
+      tier >= 1 && tier <= 6
+        ? labels?.[`t${tier}` as "t1" | "t2" | "t3" | "t4" | "t5" | "t6"]
+        : undefined;
+    return label && label.trim() !== "" ? label : null;
+  };
   const bestPlanId = bestCoveragePlanId(plans.map((p) => p.summary));
 
   const pharmacyNoteFor = (status: (typeof plans)[number]["pharmacyStatus"]): string | undefined => {
@@ -198,7 +208,17 @@ export default async function ComparisonPage({
                               {provenance?.rawDrugName ?? row.medication.name}
                             </div>
                             {cell.tier !== null ? (
-                              <div className="text-data text-sm text-deepwater">Tier {cell.tier}</div>
+                              <div
+                                className="text-data text-sm text-deepwater"
+                                title={planTierLabel(cell.planId, cell.tier) ?? undefined}
+                              >
+                                Tier {cell.tier}
+                                {planTierLabel(cell.planId, cell.tier) ? (
+                                  <span className="text-xs font-normal text-steel">
+                                    {" "}· {planTierLabel(cell.planId, cell.tier)}
+                                  </span>
+                                ) : null}
+                              </div>
                             ) : null}
                             {provenance?.rawRequirementsText ? (
                               <div className="text-data text-xs text-steel">

@@ -29,6 +29,13 @@
       "when": 1785227254676,
       "tag": "0003_drop_analysis_pricing_scalars",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1785933708414,
+      "tag": "0004_sturdy_bastion",
+      "breakpoints": true
     }
   ]
 }
