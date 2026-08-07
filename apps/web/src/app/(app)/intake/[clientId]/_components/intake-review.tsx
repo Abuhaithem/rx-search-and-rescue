@@ -279,14 +279,13 @@ export function IntakeReview(props: IntakeReviewProps) {
         actions={actions}
       />
 
-      <Card className="overflow-hidden">
-        <div className="grid lg:grid-cols-[minmax(260px,340px)_1fr]">
-          <div className="border-b border-mist/60 lg:border-b-0 lg:border-r">
+      <Card>
+        <div className="grid lg:grid-cols-[minmax(320px,400px)_1fr] lg:items-start">
+          <div className="overflow-hidden rounded-t-card border-b border-mist/60 lg:sticky lg:top-6 lg:self-start lg:rounded-l-card lg:rounded-tr-none lg:border-b-0 lg:border-r">
             <PdfPane
               src={props.sourcePdfUrl ?? ""}
               sourceLabel={props.hasSourcePdf ? `${fullName} — AgencyBloc RxC.pdf` : undefined}
-              pageCount={2}
-              className="h-full min-h-80"
+              className="h-[55vh] lg:h-[calc(100vh-6.5rem)]"
             />
           </div>
 

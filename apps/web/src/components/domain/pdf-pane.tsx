@@ -1,83 +1,65 @@
-"use client";
-
-import { useState } from "react";
-import { ChevronLeft, ChevronRight, FileText } from "lucide-react";
+import { ExternalLink, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
- * Left pane of Intake Review (screen 2): the source document beside the
- * extracted data. v1 renders a placeholder page box + page nav; the page
- * number is announced so provenance ("sourcePage") lines up with what the
- * agent sees.
+ * Left pane of Intake Review (screen 2): the source Rx Collect document beside
+ * the extracted data. Renders the real PDF in a fixed-height frame (the browser's
+ * native viewer handles scroll/zoom/paging) so the agent can check provenance
+ * against what was extracted.
  */
 
 interface PdfPaneProps {
-  /** URL of the uploaded PDF (unused by the v1 placeholder, kept for the real viewer). */
+  /** Signed URL of the uploaded PDF; empty string when there is no source document. */
   src: string;
-  /** e.g. "Barb Bentley _ AgencyBloc RxC.pdf" */
+  /** e.g. "Marilyn Healy — AgencyBloc RxC.pdf" */
   sourceLabel?: string;
-  pageCount?: number;
-  initialPage?: number;
-  /** Notified when the agent pages through the document. */
-  onPageChange?: (page: number) => void;
   className?: string;
 }
 
-function PdfPane({
-  src,
-  sourceLabel,
-  pageCount = 1,
-  initialPage = 1,
-  onPageChange,
-  className,
-}: PdfPaneProps) {
-  const [page, setPage] = useState(() => Math.min(Math.max(initialPage, 1), pageCount));
-
-  const goTo = (next: number) => {
-    const clamped = Math.min(Math.max(next, 1), pageCount);
-    setPage(clamped);
-    onPageChange?.(clamped);
-  };
+function PdfPane({ src, sourceLabel, className }: PdfPaneProps) {
+  const hasPdf = src.trim().length > 0;
 
   return (
-    <div className={cn("flex h-full flex-col gap-3 bg-fog p-4", className)}>
-      {sourceLabel ? (
-        <div className="truncate text-center text-xs text-steel" title={sourceLabel}>
-          Source: {sourceLabel}
-        </div>
-      ) : null}
-
-      {/* v1 placeholder page — swap for a real renderer of `src` later */}
-      <div
-        data-src={src}
-        className="flex min-h-64 flex-1 flex-col items-center justify-center gap-2 rounded-card border border-mist bg-white shadow-card"
-      >
-        <FileText className="size-8 text-mist" />
-        <span className="text-xs text-steel">PDF preview</span>
+    <div className={cn("flex flex-col overflow-hidden bg-fog", className)}>
+      <div className="flex items-center gap-2 border-b border-mist/70 bg-white px-3 py-2">
+        <FileText className="size-4 shrink-0 text-steel" />
+        <span
+          className="min-w-0 flex-1 truncate text-xs font-semibold text-deepwater"
+          title={sourceLabel}
+        >
+          {sourceLabel ?? "Source document"}
+        </span>
+        {hasPdf ? (
+          <a
+            href={src}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Open in a new tab"
+            aria-label="Open the source PDF in a new tab"
+            className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] font-medium text-steel transition-colors hover:bg-fog hover:text-deepwater focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <ExternalLink className="size-3.5" />
+            Open
+          </a>
+        ) : null}
       </div>
 
-      <div className="flex items-center justify-center gap-3">
-        <button
-          type="button"
-          onClick={() => goTo(page - 1)}
-          disabled={page <= 1}
-          aria-label="Previous page"
-          className="rounded-md p-1 text-steel transition-colors hover:bg-white hover:text-deepwater focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40"
-        >
-          <ChevronLeft className="size-4" />
-        </button>
-        <span className="text-data text-xs text-steel">
-          Page {page} of {pageCount}
-        </span>
-        <button
-          type="button"
-          onClick={() => goTo(page + 1)}
-          disabled={page >= pageCount}
-          aria-label="Next page"
-          className="rounded-md p-1 text-steel transition-colors hover:bg-white hover:text-deepwater focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40"
-        >
-          <ChevronRight className="size-4" />
-        </button>
+      <div className="min-h-0 flex-1 p-2">
+        {hasPdf ? (
+          <iframe
+            src={`${src}#toolbar=1&navpanes=0&view=FitH`}
+            title={sourceLabel ?? "Source PDF"}
+            className="h-full w-full rounded-md border border-mist bg-white"
+          />
+        ) : (
+          <div className="flex h-full flex-col items-center justify-center gap-2 rounded-md border border-dashed border-mist/80 bg-white px-4 text-center">
+            <FileText className="size-8 text-mist" />
+            <span className="text-xs font-medium text-steel">No source PDF</span>
+            <span className="max-w-[24ch] text-[11px] text-steel/80">
+              This client was started manually, so there is nothing to preview.
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );
