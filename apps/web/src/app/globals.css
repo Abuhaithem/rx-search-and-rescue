@@ -37,10 +37,14 @@
   --font-sans: var(--font-public-sans), "Public Sans", sans-serif;
   --font-mono: var(--font-plex-mono), "IBM Plex Mono", monospace;
 
-  --radius-card: 0.5rem;
+  --radius-card: 0.625rem;
   --radius-chip: 0.25rem;
 
-  --shadow-card: 0 1px 2px 0 rgb(14 29 47 / 0.06), 0 1px 3px 0 rgb(14 29 47 / 0.1);
+  /* Layered depth: a tight contact shadow + a soft ambient one reads as
+     considered, not flat. Elevated is for dialogs/popovers/hover lifts. */
+  --shadow-card: 0 1px 2px -1px rgb(14 29 47 / 0.06), 0 6px 20px -6px rgb(14 29 47 / 0.1);
+  --shadow-elevated: 0 4px 10px -3px rgb(14 29 47 / 0.1), 0 18px 40px -12px rgb(14 29 47 / 0.2);
+  --shadow-button: 0 1px 2px rgb(14 29 47 / 0.18);
 }
 
 @layer base {

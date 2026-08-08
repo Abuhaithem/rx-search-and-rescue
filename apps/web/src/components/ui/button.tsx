@@ -3,16 +3,16 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md font-sans font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md font-sans font-semibold transition-all duration-150 active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:shadow-none [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
-        primary: "bg-deepwater text-white hover:bg-harbor",
+        primary: "bg-deepwater text-white shadow-button hover:bg-harbor",
         /* THE flare — one per screen, on the action that completes the job. */
-        rescue: "bg-rescue text-white hover:bg-rescue-hover",
-        secondary: "border border-mist bg-white text-deepwater hover:bg-fog",
+        rescue: "bg-rescue text-white shadow-button hover:bg-rescue-hover",
+        secondary: "border border-mist bg-white text-deepwater shadow-button hover:border-steel/40 hover:bg-fog",
         ghost: "text-deepwater hover:bg-fog",
-        destructive: "bg-notcovered text-white hover:bg-notcovered/90",
+        destructive: "bg-notcovered text-white shadow-button hover:bg-notcovered/90",
       },
       size: {
         sm: "h-8 px-3 text-[13px]",

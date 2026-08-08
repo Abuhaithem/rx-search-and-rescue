@@ -10,6 +10,8 @@ import { cn } from "@/lib/utils";
 
 interface PageHeaderProps {
   title: string;
+  /** One-line context under the title. */
+  description?: string;
   /** Right-aligned action row — remember: at most one rescue Button per screen. */
   actions?: React.ReactNode;
   backHref?: string;
@@ -18,21 +20,26 @@ interface PageHeaderProps {
   className?: string;
 }
 
-function PageHeader({ title, actions, backHref, meta, className }: PageHeaderProps) {
+function PageHeader({ title, description, actions, backHref, meta, className }: PageHeaderProps) {
   return (
-    <header className={cn("flex flex-wrap items-center gap-x-4 gap-y-3", className)}>
-      {backHref ? (
-        <Link
-          href={backHref}
-          className="inline-flex items-center gap-1 rounded-md text-sm text-steel transition-colors hover:text-deepwater focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-        >
-          <ArrowLeft className="size-4" />
-          Back
-        </Link>
-      ) : null}
-      <h1 className="font-display text-2xl font-extrabold leading-tight text-deepwater">{title}</h1>
-      {meta}
-      {actions ? <div className="ml-auto flex items-center gap-2">{actions}</div> : null}
+    <header className={cn("flex flex-col gap-1.5", className)}>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
+        {backHref ? (
+          <Link
+            href={backHref}
+            className="inline-flex items-center gap-1 rounded-md text-sm text-steel transition-colors hover:text-deepwater focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          >
+            <ArrowLeft className="size-4" />
+            Back
+          </Link>
+        ) : null}
+        <h1 className="font-display text-2xl font-extrabold leading-tight tracking-tight text-deepwater">
+          {title}
+        </h1>
+        {meta}
+        {actions ? <div className="ml-auto flex items-center gap-2">{actions}</div> : null}
+      </div>
+      {description ? <p className="max-w-2xl text-sm text-steel">{description}</p> : null}
     </header>
   );
 }

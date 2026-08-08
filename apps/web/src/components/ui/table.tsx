@@ -24,7 +24,7 @@ function TBody({ className, ...props }: React.ComponentProps<"tbody">) {
 function TRow({ className, ...props }: React.ComponentProps<"tr">) {
   return (
     <tr
-      className={cn("h-11 border-b border-mist/70 transition-colors hover:bg-fog/60", className)}
+      className={cn("h-12 border-b border-mist/55 transition-colors hover:bg-fog/70", className)}
       {...props}
     />
   );
@@ -32,11 +32,18 @@ function TRow({ className, ...props }: React.ComponentProps<"tr">) {
 
 /** Header cell — eyebrow-style column label. Use inside THead. */
 function TH({ className, ...props }: React.ComponentProps<"th">) {
-  return <th className={cn("h-10 px-3 text-left align-middle text-eyebrow", className)} {...props} />;
+  return (
+    <th
+      className={cn("h-11 px-4 text-left align-middle text-eyebrow first:pl-5 last:pr-5", className)}
+      {...props}
+    />
+  );
 }
 
 function TCell({ className, ...props }: React.ComponentProps<"td">) {
-  return <td className={cn("px-3 py-3 align-middle", className)} {...props} />;
+  return (
+    <td className={cn("px-4 py-3 align-middle first:pl-5 last:pr-5", className)} {...props} />
+  );
 }
 
 export { Table, THead, TBody, TRow, TH, TCell };

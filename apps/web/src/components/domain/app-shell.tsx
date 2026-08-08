@@ -32,13 +32,20 @@ function AppShell({
   className,
 }: AppShellProps) {
   const visibleNavItems = navItems.filter((item) => item.key !== "admin" || showAdminNav);
+  const initials = userName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+
   return (
     <div className="flex min-h-screen flex-col bg-fog">
-      <header className="bg-deepwater text-white">
-        <div className="mx-auto flex h-14 w-full max-w-6xl items-center gap-8 px-6">
+      <header className="sticky top-0 z-40 bg-deepwater text-white shadow-[0_2px_10px_-2px_rgb(14_29_47/0.4)]">
+        <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-8 px-6">
           <Link
             href="/"
-            className="rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+            className="rounded-sm transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
           >
             <LogoLockup />
           </Link>
@@ -51,17 +58,27 @@ function AppShell({
                 className={cn(
                   "rounded-md px-3 py-1.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60",
                   activeNav === item.key
-                    ? "bg-harbor text-white"
-                    : "text-white/70 hover:bg-harbor/60 hover:text-white",
+                    ? "bg-harbor text-white shadow-inner"
+                    : "text-white/65 hover:bg-harbor/60 hover:text-white",
                 )}
               >
                 {item.label}
               </Link>
             ))}
           </nav>
-          <div className="ml-auto text-sm text-white/80">
-            <span className="font-semibold text-white">{userName}</span>
-            {organizationName ? <span> · {organizationName}</span> : null}
+          <div className="ml-auto flex items-center gap-3">
+            <div className="hidden text-right leading-tight sm:block">
+              <div className="text-sm font-semibold text-white">{userName}</div>
+              {organizationName ? (
+                <div className="text-[11px] text-white/55">{organizationName}</div>
+              ) : null}
+            </div>
+            <div
+              aria-hidden
+              className="flex size-9 items-center justify-center rounded-full bg-harbor text-xs font-semibold text-white ring-1 ring-inset ring-white/15"
+            >
+              {initials || "·"}
+            </div>
           </div>
         </div>
       </header>

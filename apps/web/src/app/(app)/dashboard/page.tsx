@@ -65,6 +65,7 @@ export default async function DashboardPage({
     <div className="space-y-6">
       <PageHeader
         title="Work Queue"
+        description="Every client analysis, from first intake to delivered report."
         actions={
           <Button asChild>
             <Link href="/intake/new">+ New Analysis</Link>
