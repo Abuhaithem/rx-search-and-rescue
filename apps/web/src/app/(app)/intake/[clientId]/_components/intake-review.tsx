@@ -288,7 +288,7 @@ export function IntakeReview(props: IntakeReviewProps) {
             />
           </div>
 
-          <div className="space-y-6 p-6">
+          <div className="min-w-0 space-y-6 p-6">
             <section className="space-y-3">
               <h2 className="font-display text-base font-extrabold text-deepwater">
                 Client Information
