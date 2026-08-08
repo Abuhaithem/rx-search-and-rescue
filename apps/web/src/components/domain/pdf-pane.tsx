@@ -7,9 +7,9 @@ import { cn } from "@/lib/utils";
 
 /**
  * Left pane of Intake Review (screen 2): the source Rx Collect document beside
- * the extracted data. Renders the real PDF inline (native viewer) and an
- * "Expand" action that opens it full-size in a dialog so the agent can check it
- * against the extracted rows without leaving the page.
+ * the extracted data. The inline preview is sized to a letter page (17:22) so a
+ * single-page form fills it with no dead space; "Expand" opens it full-size in a
+ * dialog so the agent can check it against the extracted rows.
  */
 
 interface PdfPaneProps {
@@ -24,10 +24,11 @@ function PdfPane({ src, sourceLabel, className }: PdfPaneProps) {
   const hasPdf = src.trim().length > 0;
   const [expanded, setExpanded] = useState(false);
   const label = sourceLabel ?? "Source document";
-  const viewerSrc = `${src}#toolbar=1&navpanes=0&view=FitH`;
+  const previewSrc = `${src}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`;
+  const fullSrc = `${src}#toolbar=1&navpanes=0&view=FitH`;
 
   return (
-    <div className={cn("flex flex-col overflow-hidden bg-fog", className)}>
+    <div className={cn("flex flex-col overflow-hidden bg-white", className)}>
       <div className="flex items-center gap-1 border-b border-mist/70 bg-white px-3 py-2">
         <FileText className="size-4 shrink-0 text-steel" />
         <span
@@ -62,15 +63,15 @@ function PdfPane({ src, sourceLabel, className }: PdfPaneProps) {
         ) : null}
       </div>
 
-      <div className="min-h-0 flex-1 p-2">
+      <div className="bg-fog p-2.5">
         {hasPdf ? (
           <iframe
-            src={viewerSrc}
+            src={previewSrc}
             title={label}
-            className="h-full w-full rounded-md border border-mist bg-white"
+            className="aspect-[17/22] w-full rounded-md border border-mist bg-white shadow-button"
           />
         ) : (
-          <div className="flex h-full flex-col items-center justify-center gap-2 rounded-md border border-dashed border-mist/80 bg-white px-4 text-center">
+          <div className="flex aspect-[17/22] flex-col items-center justify-center gap-2 rounded-md border border-dashed border-mist/80 bg-white px-4 text-center">
             <FileText className="size-8 text-mist" />
             <span className="text-xs font-medium text-steel">No source PDF</span>
             <span className="max-w-[24ch] text-[11px] text-steel/80">
@@ -87,7 +88,7 @@ function PdfPane({ src, sourceLabel, className }: PdfPaneProps) {
               <FileText className="size-4 shrink-0 text-steel" />
               <span className="truncate">{label}</span>
             </DialogTitle>
-            <iframe src={viewerSrc} title={label} className="min-h-0 flex-1 bg-white" />
+            <iframe src={fullSrc} title={label} className="min-h-0 flex-1 bg-white" />
           </DialogContent>
         </Dialog>
       ) : null}
