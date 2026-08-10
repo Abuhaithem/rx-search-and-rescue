@@ -35,7 +35,9 @@ The code no longer references Supabase anywhere — auth is DB-backed sessions
 - `db.t4g.micro`, single-AZ, 20 GB gp3, storage encrypted (KMS), Postgres 16.
 - Parameter group: `rds.force_ssl = 1`.
 - Automated backups: 14-day retention (point-in-time recovery included).
-- Create the app database/user, then set `DATABASE_URL` with `?sslmode=require`.
+- Create the app database/user, then set `DATABASE_URL` with
+  `?sslmode=verify-full` (the compose file mounts the RDS CA bundle and sets
+  `NODE_EXTRA_CA_CERTS` so the certificate is actually verified).
 
 ## 4. S3 bucket
 
@@ -63,7 +65,12 @@ The app reads credentials via the default AWS chain — `S3_BUCKET` and
 - Clone the repo, `cp .env.example .env`, fill in real values
   (`SITE_ADDRESS=app.yourdomain.com`).
 - Point DNS at the instance (Elastic IP so the address survives restarts).
-- `cd deploy && docker compose up -d --build` — Caddy provisions TLS itself.
+- Download the RDS CA bundle next to the compose file (it's public, no auth):
+  ```bash
+  cd deploy
+  curl -o rds-global-bundle.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
+  ```
+- `docker compose up -d --build` — Caddy provisions TLS itself.
 - Run migrations from the box: `pnpm db:migrate`.
 
 ## 7. Data migration (the cutover)

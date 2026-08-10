@@ -18,6 +18,10 @@ services:
     depends_on:
       - web
 
+  # rds-global-bundle.pem (RDS CA, public) must sit next to this file:
+  #   curl -o rds-global-bundle.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
+  # NODE_EXTRA_CA_CERTS makes Node trust it, so DATABASE_URL can use
+  # sslmode=verify-full (verified TLS, not just encrypted).
   web:
     build:
       context: ..
@@ -26,6 +30,9 @@ services:
     env_file: ../.env
     environment:
       REDIS_URL: redis://redis:6379
+      NODE_EXTRA_CA_CERTS: /etc/ssl/certs/rds-global-bundle.pem
+    volumes:
+      - ./rds-global-bundle.pem:/etc/ssl/certs/rds-global-bundle.pem:ro
     expose:
       - "3000"
     depends_on:
@@ -39,6 +46,9 @@ services:
     env_file: ../.env
     environment:
       REDIS_URL: redis://redis:6379
+      NODE_EXTRA_CA_CERTS: /etc/ssl/certs/rds-global-bundle.pem
+    volumes:
+      - ./rds-global-bundle.pem:/etc/ssl/certs/rds-global-bundle.pem:ro
     depends_on:
       - redis
 
