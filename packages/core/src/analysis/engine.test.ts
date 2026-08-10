@@ -537,3 +537,63 @@ describe("tierFromNumber", () => {
     expect(() => tierFromNumber(7)).toThrow(/out of range/);
   });
 });
+
+describe("token canonicalization — RxC dosage text vs formulary spelling", () => {
+  it("matches 'TAB 5MG' against 'oral tablet 5 mg' as ingredient_strength_form", () => {
+    const eliquis = med({ name: "Eliquis", normalizedName: "eliquis 5mg tab" });
+    const entries = [
+      entry({ id: "e-2.5", normalizedName: "eliquis oral tablet 2.5 mg", tier: 3 }),
+      entry({ id: "e-5", normalizedName: "eliquis oral tablet 5 mg", tier: 3 }),
+    ];
+    const match = matchMedication(eliquis, entries);
+    expect(match?.method).toBe("ingredient_strength_form");
+    expect(match?.entry.id).toBe("e-5");
+    expect(match?.needsConfirmation).toBe(false);
+  });
+
+  it("canonicalizes salt and release-form synonyms", () => {
+    const metformin = med({
+      name: "metformin hydrochloride er",
+      normalizedName: "metformin hydrochloride er tab 500mg",
+    });
+    const target = entry({
+      id: "e-er",
+      normalizedName: "metformin hcl oral tablet extended release 500 mg",
+      tier: 2,
+    });
+    const match = matchMedication(metformin, [target]);
+    expect(match?.method).toBe("ingredient_strength_form");
+    expect(match?.entry.id).toBe("e-er");
+  });
+
+  it("picks the tightest containment match, not the first", () => {
+    const plain = med({ name: "metformin", normalizedName: "metformin hcl 500mg tab" });
+    const entries = [
+      entry({
+        id: "e-combo",
+        normalizedName: "metformin hcl pioglitazone oral tablet 500 mg 15 mg",
+        tier: 4,
+      }),
+      entry({ id: "e-plain", normalizedName: "metformin hcl oral tablet 500 mg", tier: 1 }),
+    ];
+    const match = matchMedication(plain, entries);
+    expect(match?.entry.id).toBe("e-plain");
+  });
+
+  it("fuzzy picks the highest-overlap candidate and flags for confirmation", () => {
+    // 25 mg exists in no entry, so containment fails and fuzzy must choose.
+    const strange = med({ name: "lisinopril", normalizedName: "lisinopril hctz 25mg" });
+    const entries = [
+      entry({ id: "e-mono", normalizedName: "lisinopril oral 10 mg", tier: 1 }),
+      entry({
+        id: "e-hctz",
+        normalizedName: "lisinopril hctz oral tablet 20 mg 12.5 mg",
+        tier: 1,
+      }),
+    ];
+    const match = matchMedication(strange, entries);
+    expect(match?.method).toBe("fuzzy_name");
+    expect(match?.entry.id).toBe("e-hctz");
+    expect(match?.needsConfirmation).toBe(true);
+  });
+});

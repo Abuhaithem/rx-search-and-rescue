@@ -139,14 +139,56 @@ export interface CostMatrixCell {
 
 // ── Matching ─────────────────────────────────────────────────────────────────
 
-const normalize = (s: string) =>
-  s
-    .toLowerCase()
+/**
+ * The two sides spell the same drug differently: RxC dosage text says
+ * "TAB 5MG", formularies print "oral tablet 5 mg". Canonicalization makes
+ * both sides produce identical tokens so strength+form matches land as
+ * confident ingredient_strength_form instead of falling through to fuzzy.
+ */
+const TOKEN_SYNONYMS: Record<string, string> = {
+  tab: "tablet",
+  tabs: "tablet",
+  tablets: "tablet",
+  cap: "capsule",
+  caps: "capsule",
+  capsules: "capsule",
+  sol: "solution",
+  soln: "solution",
+  susp: "suspension",
+  inj: "injection",
+  cre: "cream",
+  oin: "ointment",
+  syp: "syrup",
+  inh: "inhaler",
+  lot: "lotion",
+  supp: "suppository",
+  hydrochloride: "hcl",
+  xr: "er",
+  xl: "er",
+  sr: "er",
+};
+
+const PHRASE_SYNONYMS: [RegExp, string][] = [
+  [/\bextended[- ]release\b/g, " er "],
+  [/\bdelayed[- ]release\b/g, " dr "],
+];
+
+const normalize = (s: string) => {
+  let out = s.toLowerCase();
+  for (const [pattern, replacement] of PHRASE_SYNONYMS) out = out.replace(pattern, replacement);
+  return out
     .replace(/[^a-z0-9./% ]+/g, " ")
+    // "5mg" → "5 mg", "mg5" → "mg 5": both sides split identically.
+    .replace(/(\d)([a-z%])/g, "$1 $2")
+    .replace(/([a-z])(\d)/g, "$1 $2")
     .replace(/\s+/g, " ")
     .trim();
+};
 
-const tokens = (s: string) => new Set(normalize(s).split(" ").filter(Boolean));
+const canonicalToken = (t: string): string => TOKEN_SYNONYMS[t] ?? t;
+
+const tokens = (s: string) =>
+  new Set(normalize(s).split(" ").filter(Boolean).map(canonicalToken));
 
 const intersects = (a: string[], b: string[]) => {
   if (a.length === 0 || b.length === 0) return false;
@@ -172,22 +214,37 @@ export function matchMedication(
     }
   }
 
-  // 2. ingredient + strength + form via normalized name containment
+  // 2. ingredient + strength + form via normalized token containment.
+  // All containing entries compete: the TIGHTEST wins (fewest extra tokens),
+  // ties broken by lower tier — a med with a strength picks its own strength
+  // row, never an arbitrary first hit.
   if (med.normalizedName) {
     const medTokens = tokens(med.normalizedName);
-    for (const entry of entries) {
-      if (!entry.normalizedName) continue;
-      const entryTokens = tokens(entry.normalizedName);
-      let contained = true;
-      for (const t of medTokens) {
-        if (!entryTokens.has(t)) {
-          contained = false;
-          break;
+    if (medTokens.size > 0) {
+      let best: { entry: EngineFormularyEntry; extra: number } | null = null;
+      for (const entry of entries) {
+        if (!entry.normalizedName) continue;
+        const entryTokens = tokens(entry.normalizedName);
+        let contained = true;
+        for (const t of medTokens) {
+          if (!entryTokens.has(t)) {
+            contained = false;
+            break;
+          }
+        }
+        if (!contained) continue;
+        const extra = entryTokens.size - medTokens.size;
+        if (
+          best === null ||
+          extra < best.extra ||
+          (extra === best.extra && entry.tier < best.entry.tier)
+        ) {
+          best = { entry, extra };
         }
       }
-      if (contained && medTokens.size > 0) {
+      if (best) {
         return {
-          entry,
+          entry: best.entry,
           method: "ingredient_strength_form",
           needsConfirmation: false,
           substitutionNote: null,
@@ -214,14 +271,34 @@ export function matchMedication(
     }
   }
 
-  // 4. fuzzy name: primary token (ingredient) match, flagged for agent confirmation
+  // 4. fuzzy name: shared primary token (ingredient) plus the highest token
+  // overlap across all candidates — flagged for agent confirmation.
   const medPrimary = normalize(med.normalizedName ?? med.name).split(" ")[0];
   if (medPrimary && medPrimary.length >= 4) {
+    const medTokens = tokens(med.normalizedName ?? med.name);
+    let best: { entry: EngineFormularyEntry; overlap: number } | null = null;
     for (const entry of entries) {
       const entryNorm = normalize(entry.normalizedName ?? entry.rawDrugName);
-      if (entryNorm.startsWith(medPrimary) || entryNorm.includes(` ${medPrimary}`)) {
-        return { entry, method: "fuzzy_name", needsConfirmation: true, substitutionNote: null };
+      if (!entryNorm.startsWith(medPrimary) && !entryNorm.includes(` ${medPrimary}`)) continue;
+      const entryTokens = tokens(entry.normalizedName ?? entry.rawDrugName);
+      let shared = 0;
+      for (const t of medTokens) if (entryTokens.has(t)) shared += 1;
+      const overlap = medTokens.size === 0 ? 0 : shared / medTokens.size;
+      if (
+        best === null ||
+        overlap > best.overlap ||
+        (overlap === best.overlap && entry.tier < best.entry.tier)
+      ) {
+        best = { entry, overlap };
       }
+    }
+    if (best) {
+      return {
+        entry: best.entry,
+        method: "fuzzy_name",
+        needsConfirmation: true,
+        substitutionNote: null,
+      };
     }
   }
 
