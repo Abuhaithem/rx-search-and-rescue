@@ -72,6 +72,15 @@ export interface ComparisonScenario {
   assumedPlanIds: Set<string>;
 }
 
+/** One compared pharmacy's network standing on every compared plan. */
+export interface PharmacyNetworkRow {
+  pharmacyId: string;
+  pharmacyName: string;
+  city: string | null;
+  /** Keyed by planId; null = no network row on file (pricing assumes standard). */
+  statusByPlan: Record<string, NetworkStatus | null>;
+}
+
 export interface ComparisonInputs {
   analysis: AnalysisRow;
   client: ClientRow;
@@ -81,6 +90,7 @@ export interface ComparisonInputs {
   enginePlans: EnginePlan[];
   /** Drives the classic per-cell grid pricing; the first compared pharmacy. */
   primaryPharmacy: PharmacyRow | null;
+  pharmacyNetwork: PharmacyNetworkRow[];
   scenarios: ComparisonScenario[];
   /** Keyed by formulary entry id; lookup via CellResult.matchedEntryId. */
   entryProvenance: Record<string, EntryProvenance>;
@@ -265,6 +275,18 @@ export async function loadComparisonInputs(analysisId: string): Promise<Comparis
     includeMailOrder: analysis.includeMailOrder,
   });
 
+  const pharmacyNetwork: PharmacyNetworkRow[] = comparedPharmacies.map((pharmacy) => ({
+    pharmacyId: pharmacy.id,
+    pharmacyName: pharmacy.name,
+    city: pharmacy.city,
+    statusByPlan: Object.fromEntries(
+      orderedPlanRows.map((ap) => [
+        ap.plan.id,
+        statusByPharmacyPlan.get(`${pharmacy.id}:${ap.plan.id}`) ?? null,
+      ]),
+    ),
+  }));
+
   return {
     analysis: analysisColumns as AnalysisRow,
     client: clientColumns as ClientRow,
@@ -273,6 +295,7 @@ export async function loadComparisonInputs(analysisId: string): Promise<Comparis
     engineMedications: medications.map(toEngineMedication),
     enginePlans,
     primaryPharmacy,
+    pharmacyNetwork,
     scenarios,
     entryProvenance,
   };
@@ -321,6 +344,7 @@ export interface ComparisonData {
   plans: ComparisonPlanColumn[];
   grid: ComparisonGridRow[];
   primaryPharmacy: PharmacyRow | null;
+  pharmacyNetwork: PharmacyNetworkRow[];
   costMatrix: ComparisonMatrixRow[];
   /** Keyed by formulary entry id; lookup via CellResult.matchedEntryId. */
   entryProvenance: Record<string, EntryProvenance>;
@@ -511,6 +535,7 @@ export async function getComparison(analysisId: string): Promise<ComparisonData 
     plans: planColumns,
     grid,
     primaryPharmacy: inputs.primaryPharmacy,
+    pharmacyNetwork: inputs.pharmacyNetwork,
     costMatrix: buildCostMatrix(inputs, matrixCells),
     entryProvenance: inputs.entryProvenance,
   };

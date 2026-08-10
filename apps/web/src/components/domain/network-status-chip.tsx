@@ -4,7 +4,8 @@ import { cn } from "@/lib/utils";
 /** How a pharmacy sits in a plan's network. Coverage-meaning colors only. */
 
 interface NetworkStatusChipProps {
-  status: NetworkStatus;
+  /** null = no network row on file; pricing assumes standard retail. */
+  status: NetworkStatus | null;
   className?: string;
 }
 
@@ -25,11 +26,11 @@ function NetworkStatusChip({ status, className }: NetworkStatusChipProps) {
     <span
       className={cn(
         "inline-flex items-center whitespace-nowrap rounded-chip px-2 py-0.5 text-xs font-semibold",
-        networkStyles[status],
+        status === null ? "bg-fog text-steel" : networkStyles[status],
         className,
       )}
     >
-      {networkLabels[status]}
+      {status === null ? "Assumed standard" : networkLabels[status]}
     </span>
   );
 }

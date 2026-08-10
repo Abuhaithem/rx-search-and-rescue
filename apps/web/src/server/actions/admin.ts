@@ -49,6 +49,81 @@ const slugify = (name: string): string =>
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
 
+const carrierNameSchema = z.string().trim().min(2).max(80);
+
+export async function createCarrier(
+  name: string,
+): Promise<ActionResult<{ carrierId: string }>> {
+  try {
+    const profile = await requireRole("admin", "manager");
+    const carrierName = carrierNameSchema.parse(name);
+    const slug = slugify(carrierName);
+    if (!slug) return err("Carrier name needs at least one letter or number");
+
+    const db = getDb();
+    const existing = await db.select().from(carriers).where(eq(carriers.slug, slug));
+    if (existing[0]) return err(`"${existing[0].name}" already exists`);
+
+    const [inserted] = await db
+      .insert(carriers)
+      .values({ name: carrierName, slug })
+      .returning({ id: carriers.id });
+    if (!inserted) return err("Failed to create carrier");
+
+    await writeAudit(db, {
+      actorId: profile.id,
+      action: "carrier.created",
+      entityType: "carrier",
+      entityId: inserted.id,
+      meta: { name: carrierName },
+    });
+
+    revalidatePath("/", "layout");
+    return ok({ carrierId: inserted.id });
+  } catch (e) {
+    return err(errorMessage(e));
+  }
+}
+
+export async function renameCarrier(
+  carrierId: string,
+  name: string,
+): Promise<ActionResult<{ carrierId: string }>> {
+  try {
+    const profile = await requireRole("admin", "manager");
+    uuidSchema.parse(carrierId);
+    const carrierName = carrierNameSchema.parse(name);
+    const slug = slugify(carrierName);
+    if (!slug) return err("Carrier name needs at least one letter or number");
+
+    const db = getDb();
+    const clash = await db.select().from(carriers).where(eq(carriers.slug, slug));
+    if (clash[0] && clash[0].id !== carrierId) {
+      return err(`"${clash[0].name}" already uses that name`);
+    }
+
+    const [updated] = await db
+      .update(carriers)
+      .set({ name: carrierName, slug })
+      .where(eq(carriers.id, carrierId))
+      .returning({ id: carriers.id });
+    if (!updated) return err("Carrier not found");
+
+    await writeAudit(db, {
+      actorId: profile.id,
+      action: "carrier.renamed",
+      entityType: "carrier",
+      entityId: carrierId,
+      meta: { name: carrierName },
+    });
+
+    revalidatePath("/", "layout");
+    return ok({ carrierId });
+  } catch (e) {
+    return err(errorMessage(e));
+  }
+}
+
 type Tx = Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0];
 
 async function resolveCarrierId(

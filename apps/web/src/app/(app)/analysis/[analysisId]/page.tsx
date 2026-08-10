@@ -13,6 +13,7 @@ import { RestrictionChip } from "@/components/domain/restriction-chip";
 import { CostMatrix } from "@/components/domain/cost-matrix";
 import { WorkflowNav } from "@/components/domain/workflow-nav";
 import { MailOrderToggle } from "./_components/mail-order-toggle";
+import { PharmacyNetworkCard } from "./_components/pharmacy-network-card";
 import { PharmacyPicker } from "./_components/pharmacy-picker";
 import { cn } from "@/lib/utils";
 
@@ -78,7 +79,8 @@ export default async function ComparisonPage({
   if (!comparison) notFound();
   if (comparison.plans.length === 0) redirect(`/analysis/${analysisId}/plans`);
 
-  const { client, plans, grid, primaryPharmacy, costMatrix, analysis, entryProvenance } = comparison;
+  const { client, plans, grid, primaryPharmacy, pharmacyNetwork, costMatrix, analysis, entryProvenance } =
+    comparison;
 
   // Per-plan SoB tier label for tooltips; identity stays the numeric tier.
   const planTierLabel = (planId: string, tier: number): string | null => {
@@ -90,18 +92,6 @@ export default async function ComparisonPage({
     return label && label.trim() !== "" ? label : null;
   };
   const bestPlanId = bestCoveragePlanId(plans.map((p) => p.summary));
-
-  const pharmacyNoteFor = (status: (typeof plans)[number]["pharmacyStatus"]): string | undefined => {
-    if (!primaryPharmacy || !status) return undefined;
-    switch (status) {
-      case "preferred":
-        return `${primaryPharmacy.name}: Preferred`;
-      case "standard":
-        return `${primaryPharmacy.name}: Standard — higher copays`;
-      case "out_of_network":
-        return `${primaryPharmacy.name}: Not in network`;
-    }
-  };
 
   const gridPricingLabel = primaryPharmacy
     ? `${primaryPharmacy.name}'s network status on each plan`
@@ -134,7 +124,8 @@ export default async function ComparisonPage({
             planName={planColumn.plan.name}
             carrier={planColumn.carrierName}
             isCurrentPlan={planColumn.isCurrent}
-            pharmacyNote={pharmacyNoteFor(planColumn.pharmacyStatus)}
+            pharmacyName={primaryPharmacy?.name}
+            pharmacyStatus={planColumn.pharmacyStatus}
             coveredCount={planColumn.summary.coveredCount}
             medicationCount={planColumn.summary.totalCount}
             restrictionsLabel={summaryRestrictionsLabel(planColumn.summary)}
@@ -145,6 +136,8 @@ export default async function ComparisonPage({
           />
         ))}
       </div>
+
+      <PharmacyNetworkCard pharmacies={pharmacyNetwork} plans={plans} />
 
       <CostMatrix
         rows={costMatrix}

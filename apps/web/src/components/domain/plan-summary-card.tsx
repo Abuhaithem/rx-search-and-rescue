@@ -1,5 +1,6 @@
-import type { Cents } from "@rxsr/core";
+import type { Cents, NetworkStatus } from "@rxsr/core";
 import { formatUsd } from "@/components/domain/format";
+import { NetworkStatusChip } from "@/components/domain/network-status-chip";
 import { cn } from "@/lib/utils";
 
 /**
@@ -12,8 +13,9 @@ interface PlanSummaryCardProps {
   planName: string;
   carrier: string;
   isCurrentPlan?: boolean;
-  /** e.g. "Valley Apoth.: Standard — higher copays". Computed upstream. */
-  pharmacyNote?: string;
+  /** Primary pharmacy; when set, its network status renders as a chip. */
+  pharmacyName?: string;
+  pharmacyStatus?: NetworkStatus | null;
   coveredCount: number;
   medicationCount: number;
   /** e.g. "1 PA · 1 QL". Empty/undefined renders "none". */
@@ -36,7 +38,8 @@ function PlanSummaryCard({
   planName,
   carrier,
   isCurrentPlan = false,
-  pharmacyNote,
+  pharmacyName,
+  pharmacyStatus,
   coveredCount,
   medicationCount,
   restrictionsLabel,
@@ -46,9 +49,7 @@ function PlanSummaryCard({
   bestCoverage = false,
   className,
 }: PlanSummaryCardProps) {
-  const meta = [carrier, isCurrentPlan ? "current plan" : null, pharmacyNote]
-    .filter(Boolean)
-    .join(" · ");
+  const meta = [carrier, isCurrentPlan ? "current plan" : null].filter(Boolean).join(" · ");
 
   return (
     <div
@@ -67,6 +68,13 @@ function PlanSummaryCard({
         ) : null}
       </div>
       <div className="mt-0.5 text-xs text-steel">{meta}</div>
+
+      {pharmacyName ? (
+        <div className="mt-2 flex items-center gap-2">
+          <span className="max-w-[45%] truncate text-xs text-steel">{pharmacyName}</span>
+          <NetworkStatusChip status={pharmacyStatus ?? null} />
+        </div>
+      ) : null}
 
       {rxDeductibleCents != null ? (
         <div className="mt-2 rounded-chip bg-fog px-2 py-1 text-xs text-steel">

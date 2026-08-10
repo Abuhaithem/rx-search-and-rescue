@@ -50,7 +50,7 @@ export const clientFieldsSchema = z.object({
   county: z.string().nullish(),
   takesPrescriptions: z.boolean().nullish(),
   deliveryPreferred: z.boolean().nullish(),
-  mailOrderInterest: z.enum(["yes", "no", "ask_client"]).nullish(),
+  mailOrderInterest: z.enum(["yes", "no"]).nullish(),
 });
 export type ClientFieldsInput = z.input<typeof clientFieldsSchema>;
 

@@ -1,10 +1,50 @@
 /**
- * PDF chunking for providers with small context windows (Haiku 200K,
- * DeepSeek-class 128K): split into ~25-page sub-documents with pdf-lib and
- * re-map absolute page numbers to chunk-relative ones. Providers with large
- * contexts pass maxPages undefined and receive the whole document.
+ * PDF splitting with pdf-lib. Formulary ingestion sends one single-page
+ * sub-PDF per extraction call (createPageExtractor) — re-sending multi-page
+ * chunks per page call paid for the same pages ~25×. chunkPdf remains for
+ * callers that genuinely want page-ranged sub-documents (legend front matter,
+ * scripts).
  */
 import { PDFDocument } from "pdf-lib";
+
+export interface PageExtractor {
+  totalPages: number;
+  /** Base64 single-page sub-PDF for a 1-indexed absolute page. */
+  pageBase64(page: number): Promise<string>;
+  /** Base64 sub-PDF covering an inclusive 1-indexed page range. */
+  rangeBase64(startPage: number, endPage: number): Promise<string>;
+}
+
+/** Loads the source once; each call copies only the requested pages out. */
+export async function createPageExtractor(data: Uint8Array): Promise<PageExtractor> {
+  const source = await PDFDocument.load(new Uint8Array(data), {
+    ignoreEncryption: true,
+    updateMetadata: false,
+  });
+  const totalPages = source.getPageCount();
+
+  async function rangeBase64(startPage: number, endPage: number): Promise<string> {
+    if (startPage < 1 || endPage > totalPages || startPage > endPage) {
+      throw new Error(
+        `Page range ${startPage}-${endPage} outside document (1-${totalPages})`,
+      );
+    }
+    const target = await PDFDocument.create();
+    const indices = Array.from(
+      { length: endPage - startPage + 1 },
+      (_, i) => startPage - 1 + i,
+    );
+    const pages = await target.copyPages(source, indices);
+    for (const page of pages) target.addPage(page);
+    return Buffer.from(await target.save()).toString("base64");
+  }
+
+  return {
+    totalPages,
+    rangeBase64,
+    pageBase64: (page) => rangeBase64(page, page),
+  };
+}
 
 export interface PdfChunk {
   base64: string;

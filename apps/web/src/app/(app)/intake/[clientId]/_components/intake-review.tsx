@@ -24,6 +24,7 @@ import { PageHeader } from "@/components/domain/page-header";
 import { PdfPane } from "@/components/domain/pdf-pane";
 import { Table, TBody, TCell, TH, THead, TRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import { PharmacyCombobox, type PharmacySelection } from "./pharmacy-combobox";
 
 export interface IntakeMedication {
   id?: string;
@@ -106,15 +107,22 @@ export function IntakeReview(props: IntakeReviewProps) {
   const [fullName, setFullName] = useState(props.client.fullName);
   const [zip, setZip] = useState(props.client.zip ?? "");
   const [county, setCounty] = useState(props.client.county ?? "");
+  // Legacy "ask_client" rows collapse to "no" — the option no longer exists.
   const [mailOrderInterest, setMailOrderInterest] = useState(
-    props.client.mailOrderInterest ?? "ask_client",
+    props.client.mailOrderInterest === "yes" ? "yes" : "no",
   );
   const [planYear, setPlanYear] = useState(props.defaultPlanYear);
   const [currentPolicyId, setCurrentPolicyId] = useState<string>(
     props.policies.find((p) => p.isCurrentDrugPlan)?.id ?? "none",
   );
   const rankOne = props.pharmacies.find((p) => p.rank === 1) ?? props.pharmacies[0] ?? null;
-  const [pharmacyText, setPharmacyText] = useState(rankOne?.pharmacyName ?? rankOne?.rawText ?? "");
+  const [pharmacySelection, setPharmacySelection] = useState<PharmacySelection>({
+    label: rankOne?.pharmacyName ?? rankOne?.rawText ?? "",
+    pharmacyId: rankOne?.pharmacyId ?? null,
+  });
+  // Flips once the agent picks from the combobox — an explicit selection
+  // outranks the extraction's match confidence.
+  const [pharmacyTouched, setPharmacyTouched] = useState(false);
   const [medications, setMedications] = useState<MedicationRowState[]>(() =>
     props.medications.map((m) => ({ ...m, key: makeKey() })),
   );
@@ -147,9 +155,11 @@ export function IntakeReview(props: IntakeReviewProps) {
   const reviewMeds = useMemo(() => medications.filter((m) => needsReview(m)), [medications]);
 
   const pharmacyUnconfirmed =
-    rankOne !== null &&
-    (!rankOne.pharmacyId ||
-      (!rankOne.confirmed &&
+    pharmacySelection.label.trim() !== "" &&
+    (pharmacySelection.pharmacyId === null ||
+      (!pharmacyTouched &&
+        rankOne !== null &&
+        !rankOne.confirmed &&
         rankOne.matchConfidence !== null &&
         rankOne.matchConfidence < LOW_CONFIDENCE));
 
@@ -207,7 +217,7 @@ export function IntakeReview(props: IntakeReviewProps) {
         takesPrescriptions: props.client.takesPrescriptions,
         deliveryPreferred: props.client.deliveryPreferred,
         mailOrderInterest:
-          mailOrderInterest === "yes" || mailOrderInterest === "no" || mailOrderInterest === "ask_client"
+          mailOrderInterest === "yes" || mailOrderInterest === "no"
             ? mailOrderInterest
             : null,
       },
@@ -226,13 +236,13 @@ export function IntakeReview(props: IntakeReviewProps) {
         position: index,
         rawText: m.rawText || m.name.trim(),
       })),
-      pharmacies: pharmacyText.trim()
+      pharmacies: pharmacySelection.label.trim()
         ? [
             {
               id: rankOne?.id,
               rank: 1,
-              rawText: pharmacyText.trim(),
-              pharmacyId: rankOne?.pharmacyId ?? null,
+              rawText: pharmacySelection.label.trim(),
+              pharmacyId: pharmacySelection.pharmacyId,
             },
             ...props.pharmacies
               .filter((p) => p !== rankOne)
@@ -369,26 +379,25 @@ export function IntakeReview(props: IntakeReviewProps) {
 
               <div className="flex flex-wrap items-end gap-x-4 gap-y-3">
                 <div className="space-y-1">
-                  <Label htmlFor="client-pharmacy" className="text-xs text-steel">
-                    Preferred pharmacy
-                  </Label>
+                  <Label className="text-xs text-steel">Preferred pharmacy</Label>
                   <div className="flex items-center gap-2">
-                    <Input
-                      id="client-pharmacy"
-                      value={pharmacyText}
-                      onChange={(e) => setPharmacyText(e.target.value)}
-                      placeholder="If left blank: (most efficient)"
-                      className={cn("w-64", pharmacyUnconfirmed && "border-restricted bg-restricted-soft/40")}
+                    <PharmacyCombobox
+                      value={pharmacySelection}
+                      invalid={pharmacyUnconfirmed}
+                      onChange={(selection) => {
+                        setPharmacySelection(selection);
+                        setPharmacyTouched(true);
+                      }}
                     />
-                    {rankOne && pharmacyText.trim() ? (
+                    {pharmacySelection.label.trim() ? (
                       pharmacyUnconfirmed ? (
                         <span className="inline-flex items-center gap-1 rounded-chip bg-restricted-soft px-2 py-0.5 text-xs font-semibold text-restricted">
                           <TriangleAlert className="size-3" />
-                          Match unconfirmed
+                          No pharmacy on file matched
                         </span>
                       ) : (
                         <span className="inline-flex items-center rounded-chip bg-covered-soft px-2 py-0.5 text-xs font-semibold text-covered">
-                          from Rx Collect ✓
+                          {pharmacyTouched ? "Linked ✓" : "from Rx Collect ✓"}
                         </span>
                       )
                     ) : null}
@@ -403,7 +412,6 @@ export function IntakeReview(props: IntakeReviewProps) {
                     <SelectContent>
                       <SelectItem value="yes">Yes</SelectItem>
                       <SelectItem value="no">No</SelectItem>
-                      <SelectItem value="ask_client">Ask client</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

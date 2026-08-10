@@ -1,10 +1,10 @@
 /**
  * Anthropic provider: structured output via forced tool-use (one tool per
  * extraction kind whose input_schema is the shared JSON Schema), zod-gated.
- * Prompt caching: cache_control on the shared system block AND on the
- * document block. Formulary pages arrive as ~25-page chunks (Haiku's 200K
- * context — see maxContextPages), so the cache prefix is per-chunk: every
- * page call within one chunk reuses tools + system + chunk document.
+ * Prompt caching: cache_control on the shared system block only — it is
+ * reused across every page call. Formulary pages arrive as single-page
+ * sub-PDFs (each sent exactly once), so caching the document block would
+ * pay the cache-write surcharge for reads that never happen.
  */
 import Anthropic from "@anthropic-ai/sdk";
 import type { ExtractionSpec } from "./schemas";
@@ -118,7 +118,7 @@ export function createAnthropicProvider(
       const page = await run(
         formularyPageSpec,
         [
-          pdfBlock(pdfBase64OrChunk, true),
+          pdfBlock(pdfBase64OrChunk, false),
           { type: "text", text: formularyPageUserText(pageNumber) },
         ],
         options?.model ?? model,

@@ -144,7 +144,7 @@ describe("extractFormularyPage", () => {
     ],
   };
 
-  it("caches the shared prompt prefix and the document", async () => {
+  it("caches the shared prompt prefix but not the single-page document", async () => {
     const { client, requests } = fakeClient({ record_formulary_page: page });
     const result = await createAnthropicProvider({ client }).extractFormularyPage(
       "cGRm",
@@ -159,9 +159,7 @@ describe("extractFormularyPage", () => {
     if (!Array.isArray(content)) throw new Error("expected content array");
     const doc = content[0];
     expect(doc?.type).toBe("document");
-    expect(doc && "cache_control" in doc ? doc.cache_control : null).toEqual({
-      type: "ephemeral",
-    });
+    expect(doc && "cache_control" in doc ? doc.cache_control : undefined).toBeUndefined();
     expect(content[1]?.type === "text" && content[1].text).toContain("page 42");
   });
 

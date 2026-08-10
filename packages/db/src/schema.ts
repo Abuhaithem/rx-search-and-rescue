@@ -147,6 +147,7 @@ export const formularies = pgTable(
       totalEntries?: number;
       indexCount?: number; // count from the document's own alphabetical index
       needsReview?: number;
+      skippedPages?: number; // classifier-skipped non-table pages (no API call)
     }>(),
     activatedBy: uuid("activated_by").references(() => profiles.id),
     activatedAt: timestamp("activated_at", { withTimezone: true }),
@@ -331,7 +332,7 @@ export const clients = pgTable("clients", {
   county: text("county"), // confirmed county for multi-county ZIPs
   takesPrescriptions: boolean("takes_prescriptions"),
   deliveryPreferred: boolean("delivery_preferred"),
-  mailOrderInterest: text("mail_order_interest"), // "yes" | "no" | "ask_client"
+  mailOrderInterest: text("mail_order_interest"), // "yes" | "no" (legacy rows may hold "ask_client")
   sourceRxcPath: text("source_rxc_path"), // uploaded RxC PDF in Storage
   createdBy: uuid("created_by").references(() => profiles.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

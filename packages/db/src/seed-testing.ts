@@ -383,7 +383,7 @@ const [gregory] = await db
     county: "Blaine",
     takesPrescriptions: true,
     deliveryPreferred: false,
-    mailOrderInterest: "ask_client",
+    mailOrderInterest: "no",
   })
   .returning();
 
@@ -432,7 +432,7 @@ const [felix] = await db
     county: "Blaine",
     takesPrescriptions: true,
     deliveryPreferred: false,
-    mailOrderInterest: "ask_client",
+    mailOrderInterest: "no",
   })
   .returning();
 

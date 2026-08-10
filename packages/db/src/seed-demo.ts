@@ -314,7 +314,7 @@ const [demo] = await db
     county: "Blaine",
     takesPrescriptions: true,
     deliveryPreferred: false,
-    mailOrderInterest: "ask_client",
+    mailOrderInterest: "no",
   })
   .returning();
 
