@@ -29,7 +29,7 @@ export interface EngineMedication {
   normalizedName: string | null;
   /** Own RXCUI(s) for the prescribed product. */
   rxcuis: string[];
-  /** RXCUIs of brand/generic equivalents (from RxNorm crosswalk). */
+  /** RXCUIs of brand/generic equivalents (name-based matching is primary). */
   relatedRxcuis: string[];
   genericOk: boolean;
   prn: boolean;

@@ -13,9 +13,9 @@ Benefits tier costs, pharmacy directories); agents never open a formulary PDF.
 
 - **apps/web** — Next.js 15 (App Router) + Tailwind v4 + hand-crafted shadcn-style
   design system. All data access through server actions (Drizzle). No AI calls.
-- **apps/worker** — Node + BullMQ. The only component calling external APIs
-  (Anthropic extraction, RxNorm normalization, NPPES pharmacy registry). AI runs
-  at ingestion time only; running an analysis is a deterministic SQL join.
+- **apps/worker** — Node + BullMQ. The only component calling an external API
+  (the LLM extraction provider). AI runs at ingestion time only; running an
+  analysis is a deterministic SQL join.
 - **packages/db** — Drizzle schema (source of truth), migrations, seed. Auth is
   self-hosted: `profiles` carries scrypt password hashes, `sessions` carries
   hashed bearer tokens.

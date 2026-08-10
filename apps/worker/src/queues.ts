@@ -7,7 +7,7 @@ export const QUEUE_NAMES = {
   formularyIngest: "formulary-ingest",
   rxcIntake: "rxc-intake",
   pharmacyDirectory: "pharmacy-directory",
-  nppesSeed: "nppes-seed",
+  xlsxImport: "xlsx-import",
   cmsImport: "cms-import",
 } as const;
 
@@ -30,9 +30,11 @@ export interface PharmacyDirectoryJob {
   storagePath: string;
 }
 
-export interface NppesSeedJob {
+export interface XlsxImportJob {
   ingestionJobId: string;
-  state: string; // e.g. "ID"
+  carrierId: string;
+  planYear: number;
+  storagePath: string;
 }
 
 export interface CmsImportJob {

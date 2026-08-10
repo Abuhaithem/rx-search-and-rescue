@@ -39,10 +39,10 @@ async function main() {
       { connection, concurrency: 1 },
     ),
     new Worker(
-      QUEUE_NAMES.nppesSeed,
+      QUEUE_NAMES.xlsxImport,
       async (job) => {
-        const { runNppesSeed } = await import("./jobs/nppes-seed");
-        return runNppesSeed(job.data);
+        const { runXlsxImport } = await import("./jobs/xlsx-import");
+        return runXlsxImport(job.data);
       },
       { connection, concurrency: 1 },
     ),

@@ -1,8 +1,8 @@
 /**
  * RxC intake: download the uploaded RxC PDF, parse it DETERMINISTICALLY from
  * the text layer (lib/rxc-parse — the RxC layout is consistent, and this
- * keeps PHI off every LLM vendor), then RxNorm-normalize medications, resolve
- * preferred pharmacies, classify in-force policies, and land everything
+ * keeps PHI off every LLM vendor), resolve preferred pharmacies against the
+ * pharmacies table, classify in-force policies, and land everything
  * unconfirmed (agents flip `confirmed` on the review screen).
  * The LLM provider's extractRxc runs ONLY as a fallback when the
  * deterministic parse fails (layout drift, scanned PDF with no text layer);
@@ -21,11 +21,7 @@ import type { RxcIntakeJob } from "../queues";
 import { markJobDone, markJobFailed, markJobRunning, updateJobProgress } from "../lib/db";
 import { parseDosageText } from "../lib/dosage";
 import { parseRxcText } from "../lib/rxc-parse";
-import {
-  ensurePharmacyId,
-  loadZipCandidates,
-  mergeCandidates,
-} from "../lib/pharmacies";
+import { candidateFromPharmacyRow, loadZipCandidates } from "../lib/pharmacies";
 import { createJobDeps, type JobDeps } from "./deps";
 
 /** Single best drug plan: pdp beats ma_pd; med_supp/other never qualify. */
@@ -124,23 +120,18 @@ async function insertMedications(
 ): Promise<void> {
   const { db } = deps;
   await updateJobProgress(db, job.ingestionJobId, {
-    message: `Normalizing ${extraction.medications.length} medications via RxNorm`,
+    message: `Saving ${extraction.medications.length} medications`,
   });
 
   const rows: (typeof clientMedications.$inferInsert)[] = [];
   for (const [index, medication] of extraction.medications.entries()) {
-    // RxNorm is a free best-effort service: a lookup failure downgrades to a
-    // null rxcui (agent resolves later) instead of failing the whole intake.
-    const rxcui = await deps.rxnorm
-      .findRxcuiByString(medication.dosageText ?? medication.name)
-      .catch(() => null);
     const dosage = parseDosageText(medication.dosageText);
     rows.push({
       clientId: job.clientId,
       rawText: medication.rawText,
       name: medication.name,
       dosageText: medication.dosageText,
-      rxcui,
+      rxcui: null,
       strength: dosage.strength,
       form: dosage.form,
       quantity: medication.quantity,
@@ -172,14 +163,12 @@ async function insertPharmacies(
     let pharmacyId: string | null = null;
     let matchConfidence: string | null = null;
     if (zip) {
+      // DB-only matching: unmatched entries stay unlinked and the agent
+      // resolves them with the intake pharmacy search.
       const dbRows = await loadZipCandidates(db, zip);
-      const nppesCandidates = await deps.nppes
-        .searchPharmacies({ zip })
-        .catch(() => []);
-      const pool = mergeCandidates(dbRows, nppesCandidates);
-      const best = matchPharmacy(parsed, pool.candidates)[0];
+      const best = matchPharmacy(parsed, dbRows.map(candidateFromPharmacyRow))[0];
       if (best) {
-        pharmacyId = await ensurePharmacyId(db, best.candidate, pool);
+        pharmacyId = best.candidate.id;
         matchConfidence = best.score.toFixed(3);
       }
     }

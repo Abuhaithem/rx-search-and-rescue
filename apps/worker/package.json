@@ -9,8 +9,7 @@
     "build": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "ingest:formularies": "tsx src/scripts/ingest-formularies.ts",
-    "seed:pharmacies": "tsx src/scripts/seed-pharmacies.ts"
+    "ingest:formularies": "tsx src/scripts/ingest-formularies.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.54.0",
@@ -25,6 +24,7 @@
     "tsx": "^4.19.2",
     "unpdf": "^0.12.1",
     "unzipper": "^0.12.5",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "zod": "^3.25.67"
   },
   "devDependencies": {

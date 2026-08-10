@@ -55,7 +55,7 @@ export interface CmsScanOptions {
   /**
    * NPIs already in our pharmacies table. The national network file carries
    * every pharmacy in the country (~60k+/plan); we only care about the
-   * NPPES-seeded / client-referenced set, so everything else is dropped at
+   * carrier-file / client-referenced set, so everything else is dropped at
    * scan time to keep memory flat.
    */
   knownNpis: Set<string>;

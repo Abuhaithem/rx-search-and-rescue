@@ -1,6 +1,6 @@
 /**
  * Pharmacy resolution contracts: free-text RxC pharmacy string → canonical
- * pharmacy. Implementation lives in ./match.ts (pure) + the worker's NPPES
+ * pharmacy. Implementation lives in ./match.ts (pure) + the worker's pharmacy
  * client (I/O).
  */
 
@@ -15,11 +15,11 @@ export interface ParsedPharmacyText {
 }
 
 export interface PharmacyCandidate {
-  id: string; // pharmacies.id (or NPPES NPI for not-yet-imported)
+  id: string; // pharmacies.id
   npi: string | null;
-  /** Legal organization name from NPPES. */
+  /** Legal organization name. */
   name: string;
-  /** DBA / storefront names (NPPES other_names) — what clients actually write. */
+  /** DBA / storefront names — what clients actually write. */
   altNames?: string[];
   address1: string | null;
   city: string | null;

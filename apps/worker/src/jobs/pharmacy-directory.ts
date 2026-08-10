@@ -1,18 +1,15 @@
 /**
  * Plan pharmacy directory ingest: text-layer extraction (directories are
  * text-heavy tables), Claude row extraction per page chunk, deterministic
- * matching against known + NPPES pharmacies, and plan_pharmacy_networks
- * upserts with source "directory".
+ * matching against the pharmacies table, and plan_pharmacy_networks upserts
+ * with source "directory". Directory rows with no DB match CREATE the
+ * pharmacies row — carrier files are the source of pharmacy truth.
  */
-import { planPharmacyNetworks, sql } from "@rxsr/db";
+import { and, eq, pharmacies, planPharmacyNetworks, sql } from "@rxsr/db";
 import { matchPharmacy, type ParsedPharmacyText } from "@rxsr/core/pharmacy";
 import type { PharmacyDirectoryJob } from "../queues";
 import { markJobDone, markJobFailed, markJobRunning, updateJobProgress } from "../lib/db";
-import {
-  ensurePharmacyId,
-  loadZipCandidates,
-  mergeCandidates,
-} from "../lib/pharmacies";
+import { candidateFromPharmacyRow, loadZipCandidates } from "../lib/pharmacies";
 import { createJobDeps, type JobDeps } from "./deps";
 
 const PAGES_PER_CHUNK = 4;
@@ -65,15 +62,7 @@ export async function runPharmacyDirectory(
           raw: `${row.pharmacyName} ${row.address ?? ""} ${zip}`.trim(),
         };
         const dbRows = await loadZipCandidates(db, zip);
-        const nppesCandidates = await deps.nppes
-          .searchPharmacies({ zip })
-          .catch(() => []);
-        const pool = mergeCandidates(dbRows, nppesCandidates);
-        const best = matchPharmacy(parsed, pool.candidates)[0];
-        if (!best || best.score < DIRECTORY_LINK_THRESHOLD) {
-          skipped += 1;
-          continue;
-        }
+        const best = matchPharmacy(parsed, dbRows.map(candidateFromPharmacyRow))[0];
 
         // Carriers name cost-share tiers inconsistently; "unspecified" means the
         // directory listed the pharmacy in-network with no tier language. Map it
@@ -81,7 +70,37 @@ export async function runPharmacyDirectory(
         const status = row.status === "unspecified" ? "standard" : row.status;
         if (row.status === "unspecified") unspecified += 1;
 
-        const pharmacyId = await ensurePharmacyId(db, best.candidate, pool);
+        let pharmacyId: string;
+        if (best && best.score >= DIRECTORY_LINK_THRESHOLD) {
+          pharmacyId = best.candidate.id;
+        } else {
+          // Unknown pharmacy: the directory row itself is the record of truth.
+          // Exact-match guard keeps re-ingests from planting duplicates when
+          // the fuzzy matcher scores below the link threshold.
+          const [existing] = await db
+            .select({ id: pharmacies.id })
+            .from(pharmacies)
+            .where(and(eq(pharmacies.name, row.pharmacyName), eq(pharmacies.zip, zip)))
+            .limit(1);
+          if (existing) {
+            pharmacyId = existing.id;
+          } else {
+            const [inserted] = await db
+              .insert(pharmacies)
+              .values({
+                name: row.pharmacyName,
+                address1: row.address,
+                zip,
+                source: "directory",
+              })
+              .returning({ id: pharmacies.id });
+            if (!inserted) {
+              skipped += 1;
+              continue;
+            }
+            pharmacyId = inserted.id;
+          }
+        }
         await db
           .insert(planPharmacyNetworks)
           .values({

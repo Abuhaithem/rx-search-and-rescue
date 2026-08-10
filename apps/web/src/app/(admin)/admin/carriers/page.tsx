@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/domain/page-header";
 import { formatUsd } from "@/components/domain/format";
 import { cn } from "@/lib/utils";
 import { CarrierDialog } from "./_components/carrier-dialog";
+import { WorkbookDialog } from "./_components/workbook-dialog";
 import { YearSwitcher } from "./_components/year-switcher";
 
 export const dynamic = "force-dynamic";
@@ -126,6 +127,13 @@ export default async function CarriersPage({ searchParams }: CarriersPageProps) 
                     </Button>
                   }
                 />
+                <div className="ml-auto">
+                  <WorkbookDialog
+                    carrierId={selected.id}
+                    carrierName={selected.name}
+                    planYear={year}
+                  />
+                </div>
               </div>
 
               <Card>

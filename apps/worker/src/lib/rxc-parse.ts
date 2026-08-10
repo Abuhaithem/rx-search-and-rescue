@@ -5,9 +5,12 @@
  * worker. The LLM provider's extractRxc remains only as a fallback for layout
  * drift and scanned PDFs (see jobs/rxc-intake.ts).
  *
- * Observed text-layer linearization (ground truth: the three client-provided
- * sample exports, copied to test/fixtures/rxc/*.txt):
- *  - Header: "<Name> (no group or carrier)" as the first line.
+ * Observed text-layer linearization (ground truth: the client-provided
+ * sample exports, copied to test/fixtures/rxc/*.txt — both the original
+ * layout and the 2025+ AgencyBloc revision):
+ *  - Header: "<Name> (no group or carrier)". The 2025+ revision prefixes a
+ *    status banner line ("COMPLETED/INCOMPLETE The Rx Collect form was …")
+ *    and stray "Options"/"Sales" toolbar tokens.
  *  - Preferred Pharmacies block: all field LABELS first, then the VALUES in
  *    field order: takes-prescriptions Yes/No, ZIP (printed twice), the
  *    "Search for pharmacies within…" caption, 0–3 pharmacy strings, the
@@ -91,8 +94,11 @@ const isTableHeaderLine = (line: string): boolean =>
 
 // ─── Sections ────────────────────────────────────────────────────────────────
 
+/** 2025+ revision status banner, e.g. "COMPLETED The Rx Collect form was …". */
+const STATUS_BANNER_RE = /^(COMPLETED|INCOMPLETE)\b|Rx Collect form was/i;
+
 function parseClientName(lines: string[]): string {
-  const first = lines[0];
+  const first = lines.find((l) => !STATUS_BANNER_RE.test(l));
   if (first === undefined) throw new RxcParseError("empty text layer");
   const name = first.replace(/\s*\(no group or carrier\)\s*$/i, "").trim();
   if (name === "") throw new RxcParseError("no client name in header");
@@ -118,10 +124,20 @@ function parsePharmacyBlock(lines: string[], start: number, end: number): Pharma
   const yesNo = before.find((l) => YES_NO_RE.test(l));
   const zip = before.find((l) => ZIP_LINE_RE.test(l)) ?? null;
 
-  const preferredPharmacies = block
+  // Pharmacy entries can wrap, leaving a bare ZIP on its own line — fold it
+  // back into the previous entry. Standalone ZIPs with no entry are noise.
+  const preferredPharmacies: string[] = [];
+  for (const entry of block
     .slice(searchCaption + 1, blankCaption)
-    .filter((l) => !YES_NO_RE.test(l))
-    .slice(0, 3);
+    .filter((l) => !YES_NO_RE.test(l) && !/^(Options|Sales)$/i.test(l))) {
+    const last = preferredPharmacies.length - 1;
+    if (ZIP_LINE_RE.test(entry)) {
+      if (last >= 0) preferredPharmacies[last] += ` ${entry}`;
+      continue;
+    }
+    preferredPharmacies.push(entry);
+  }
+  preferredPharmacies.splice(3);
 
   const deliveryLine = block.slice(blankCaption + 1).find((l) => YES_NO_RE.test(l));
 
@@ -144,7 +160,9 @@ export function splitNameAndDosage(text: string): { name: string; dosageText: st
   for (let k = Math.floor(tokens.length / 2); k >= 1; k--) {
     let doubled = true;
     for (let i = 0; i < k; i++) {
-      if (tokens[i] !== tokens[k + i]) {
+      // Case-insensitive: the dosage column may print the name in caps
+      // ("nintedanib esylate NINTEDANIB ESYLATE CAPSULE 100MG").
+      if (tokens[i]?.toLowerCase() !== tokens[k + i]?.toLowerCase()) {
         doubled = false;
         break;
       }
@@ -221,22 +239,26 @@ function parseAdditionalInformation(
   lines: string[],
   start: number,
   end: number,
+  clientName: string,
 ): ExtractedMedication[] {
   const body = lines
     .slice(start, end)
     .filter((l) => !/^Other prescriptions/i.test(l) && !/^Submitted$/i.test(l));
   if (body.length === 0) return [];
 
-  // The submit timestamp is glued onto the last line.
   const text = body.join("\n").replace(TRAILING_TIMESTAMP_RE, "").trim();
   if (text === "") return [];
 
   // Deliberately NOT LLM-parsed: split on the form's separators and let the
-  // intake review screen structure the entries.
+  // intake review screen structure the entries. Each entry sheds its glued
+  // submit timestamp; the 2025+ revision also appends the submitter's name
+  // as its own line — that is not a medication.
   return text
     .split(/[;\n]/)
-    .map((entry) => entry.trim())
-    .filter((entry) => entry !== "")
+    .map((entry) => entry.replace(TRAILING_TIMESTAMP_RE, "").trim())
+    .filter(
+      (entry) => entry !== "" && entry.toLowerCase() !== clientName.toLowerCase(),
+    )
     .map((entry) => ({
       name: entry,
       dosageText: null,
@@ -258,8 +280,20 @@ export function classifyPolicyType(text: string): ExtractedPolicy["policyType"] 
 }
 
 function parsePolicies(lines: string[], start: number, end: number): ExtractedPolicy[] {
-  const policies: ExtractedPolicy[] = [];
+  // The 2025+ revision wraps policy lines mid-separator
+  // ("PacificSource (Medicare) - 610257071 -" / "MAPD") — rejoin them.
+  const merged: string[] = [];
   for (const line of lines.slice(start, end)) {
+    const last = merged.length - 1;
+    if (last >= 0 && /-\s*$/.test(merged[last]!)) {
+      merged[last] = `${merged[last]} ${line}`;
+    } else {
+      merged.push(line);
+    }
+  }
+
+  const policies: ExtractedPolicy[] = [];
+  for (const line of merged) {
     if (/no in force policies/i.test(line)) return [];
     if (/^Create new$/i.test(line)) continue;
     const parts = line.split(/\s+-\s+/).map((p) => p.trim());
@@ -325,6 +359,7 @@ export function parseRxcText(pagesText: string[]): RxcExtraction {
           [contactIdx, policiesIdx, lines.length]
             .filter((i) => i > additionalIdx)
             .sort((a, b) => a - b)[0] ?? lines.length,
+          clientName,
         );
 
   let policies: ExtractedPolicy[] = [];

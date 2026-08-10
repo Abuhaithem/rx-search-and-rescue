@@ -40,6 +40,7 @@ export const networkStatus = pgEnum("network_status", [
 export const networkSource = pgEnum("network_source", [
   "cms",
   "directory",
+  "xlsx",
   "agent",
 ]);
 
@@ -288,7 +289,7 @@ export const pharmacies = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     npi: text("npi").unique(),
     name: text("name").notNull(),
-    /** DBA / storefront names from NPPES other_names — clients write these on RxC forms. */
+    /** DBA / storefront names — what clients actually write on RxC forms. */
     altNames: text("alt_names").array().notNull().default([]),
     address1: text("address1"),
     city: text("city"),
@@ -296,7 +297,7 @@ export const pharmacies = pgTable(
     zip: text("zip"),
     county: text("county"),
     phone: text("phone"),
-    source: text("source").notNull().default("manual"), // nppes | manual
+    source: text("source").notNull().default("manual"), // manual | directory | xlsx (legacy rows: nppes)
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("pharmacies_zip_idx").on(t.zip), index("pharmacies_name_idx").on(t.name)],
@@ -523,7 +524,7 @@ export const auditEvents = pgTable(
 
 export const ingestionJobs = pgTable("ingestion_jobs", {
   id: uuid("id").primaryKey().defaultRandom(),
-  kind: text("kind").notNull(), // "formulary" | "rxc" | "pharmacy_directory" | "nppes_seed"
+  kind: text("kind").notNull(), // "formulary" | "rxc" | "pharmacy_directory" | "cms_import"
   status: text("status").notNull().default("queued"), // queued | running | done | failed
   targetId: uuid("target_id"), // formularyId / clientId / planId
   progress: jsonb("progress").$type<{ page?: number; totalPages?: number; message?: string }>(),

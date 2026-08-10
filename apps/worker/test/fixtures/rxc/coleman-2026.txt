@@ -1,0 +1,54 @@
+COMPLETED The Rx Collect form was completed by the client on 8/6/2026.
+Dennis W Coleman (no group or carrier)
+Preferred Pharmacies
+Do you take prescriptions?
+ZIP Code to Search Pharmacies
+Preferred Pharmacies MAX OF 3
+Delivery Preferred
+Sales
+Yes
+53051
+53051
+Search for pharmacies within 15 miles of the ZIP code.
+If left blank: We will use the most efficient pharmacy.
+Yes
+Current Prescriptions Add Prescription
+Medication Dosage Quantity Refill Frequency Generic OK Updated By
+albuterol sulfate albuterol sulfate AER HFA (similar to ProAir HFA) - 8.5GM Inhaler 1 30 Yes Dennis W Coleman
+8/6/2026 9:11:38 PM CT
+benzonatate benzonatate CAP 200MG 90 30 Yes Dennis W Coleman
+8/6/2026 8:49:22 PM CT
+Eliquis Eliquis TAB 5MG 60 30 Yes Dennis W Coleman
+8/6/2026 9:00:06 PM CT
+hydrochlorothiazide hydrochlorothiazide TAB 25MG 30 30 Yes Dennis W Coleman
+8/6/2026 8:52:07 PM CT
+losartan potassium losartan potassium TAB 100MG 30 30 Yes Dennis W Coleman
+8/6/2026 8:53:43 PM CT
+metoprolol tartrate metoprolol tartrate TAB 100MG 60 30 Yes Dennis W Coleman
+8/6/2026 9:00:59 PM CT
+montelukast sodium montelukast sodium TAB 10MG 30 30 Yes Dennis W Coleman
+8/6/2026 8:55:46 PM CT
+nintedanib esylate NINTEDANIB ESYLATE CAPSULE 100MG 60 30 Yes Dennis W Coleman
+8/6/2026 8:48:29 PM CT
+simvastatin simvastatin TAB 20MG 30 30 Yes Dennis W Coleman
+8/6/2026 9:01:50 PM CT
+tamsulosin hcl tamsulosin hcl CAP 0.4MG 30 30 Yes Dennis W Coleman
+8/6/2026 8:50:34 PM CT
+Additional Information
+Other prescriptions, pharmacies, or notes Submitted
+Albuterol inhaler 90mg 3x/day as needed 8/6/2026 9:15:10 PM CT
+Dennis W Coleman
+CONTACT INFO
+Email: coleman@athenet.net
+Business:
+Cell: (920) 725-5707
+IN FORCE POLICIES
+Humana - H06998253 - MAPD
+RELATIONSHIPS
+Barbara Coleman
+Spouse
+ACTIVITIES (DUE)
+Create new
+No activities due.
+ PINNED NOTE
+No pinned note. Create new

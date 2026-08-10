@@ -181,6 +181,96 @@ describe("parseRxcText — failure modes (fallback triggers)", () => {
   });
 });
 
+describe("parseRxcText — Coleman sample (2025+ AgencyBloc revision, completed)", () => {
+  const result = parseRxcText(fixturePages("coleman-2026"));
+
+  it("skips the status banner and finds the client name", () => {
+    expect(result.clientName).toBe("Dennis W Coleman");
+  });
+
+  it("parses the pharmacy block with no preferred pharmacies", () => {
+    expect(result.zip).toBe("53051");
+    expect(result.takesPrescriptions).toBe(true);
+    expect(result.deliveryPreferred).toBe(true);
+    expect(result.preferredPharmacies).toEqual([]);
+  });
+
+  it("parses all ten structured medications", () => {
+    const structured = result.medications.filter((m) => m.source === "structured");
+    expect(structured).toHaveLength(10);
+    expect(structured[0]).toMatchObject({
+      name: "albuterol sulfate",
+      dosageText: "albuterol sulfate AER HFA (similar to ProAir HFA) - 8.5GM Inhaler",
+      quantity: 1,
+      daysSupply: 30,
+      genericOk: true,
+    });
+    expect(structured.map((m) => m.name)).toContain("nintedanib esylate");
+  });
+
+  it("keeps the free-text note but drops the glued timestamp and submitter name", () => {
+    const freetext = result.medications.filter((m) => m.source === "freetext");
+    expect(freetext).toHaveLength(1);
+    expect(freetext[0]).toMatchObject({
+      name: "Albuterol inhaler 90mg 3x/day as needed",
+      prn: true,
+    });
+  });
+
+  it("parses the in-force policy", () => {
+    expect(result.inForcePolicies).toEqual([
+      expect.objectContaining({
+        carrierName: "Humana",
+        policyNumber: "H06998253",
+        policyType: "ma_pd",
+      }),
+    ]);
+  });
+});
+
+describe("parseRxcText — Lynch sample (2025+ revision, incomplete, wrapped cells)", () => {
+  const result = parseRxcText(fixturePages("lynch-2025"));
+
+  it("parses the header despite the INCOMPLETE banner and Options token", () => {
+    expect(result.clientName).toBe("Janice R Lynch");
+    expect(result.zip).toBe("83646");
+    expect(result.takesPrescriptions).toBe(true);
+    expect(result.deliveryPreferred).toBe(false);
+  });
+
+  it("folds the wrapped ZIP back into the pharmacy entry", () => {
+    expect(result.preferredPharmacies).toEqual([
+      "Albertsons Pharmacy #3195 - 3499 E Fairview Ave Meridian ID 83642",
+    ]);
+  });
+
+  it("parses all six structured medications with wrapped dosage cells", () => {
+    const structured = result.medications.filter((m) => m.source === "structured");
+    expect(structured.map((m) => m.name)).toEqual([
+      "estradiol vaginal",
+      "lisinopril",
+      "Lyrica",
+      "metformin hcl",
+      "sertraline hcl",
+      "valacyclovir hcl",
+    ]);
+    expect(structured.find((m) => m.name === "valacyclovir hcl")).toMatchObject({
+      quantity: 50,
+      daysSupply: 360,
+    });
+  });
+
+  it("rejoins the wrapped policy line and classifies it", () => {
+    expect(result.inForcePolicies).toEqual([
+      expect.objectContaining({
+        carrierName: "PacificSource (Medicare)",
+        policyNumber: "610257071",
+        policyType: "ma_pd",
+      }),
+    ]);
+  });
+});
+
 describe("splitNameAndDosage", () => {
   it("splits on the longest doubled token prefix", () => {
     expect(

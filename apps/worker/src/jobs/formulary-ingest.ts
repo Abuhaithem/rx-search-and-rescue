@@ -1,7 +1,7 @@
 /**
  * Formulary ingest: per-page vision extraction (provider-pluggable)
  * cross-checked against the PDF text layer, deterministic restriction
- * parsing, multi-strength expansion, RxNorm normalization, and batch insert.
+ * parsing, multi-strength expansion, and batch insert.
  * Each extraction call receives a single-page sub-PDF; index/front-matter
  * pages are skipped up front by the deterministic text-layer classifier
  * (lib/page-classify) so no API call is spent on them. Pages that fail the
@@ -103,14 +103,11 @@ export async function runFormularyIngest(
       for (const row of extracted.rows) {
         const restrictions = parseRestrictions(row.requirementsText);
         for (const normalizedName of expandStrengths(row.rawDrugName)) {
-          const rxcui = await deps.rxnorm
-            .findRxcuiByString(normalizedName)
-            .catch(() => null);
           pending.push({
             formularyId: job.formularyId,
             rawDrugName: row.rawDrugName,
             normalizedName,
-            rxcuis: rxcui !== null ? [rxcui] : [],
+            rxcuis: [],
             isBrand: isBrandName(row.rawDrugName),
             tier: row.tier,
             pa: restrictions.pa,

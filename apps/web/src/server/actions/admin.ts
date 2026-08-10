@@ -512,6 +512,63 @@ export async function attachPharmacyDirectory(
   }
 }
 
+/** formData: xlsx (the agency carrier workbook). */
+export async function importCarrierWorkbook(
+  carrierId: string,
+  planYear: number,
+  formData: FormData,
+): Promise<ActionResult<{ ingestionJobId: string }>> {
+  try {
+    const profile = await requireRole("admin", "manager");
+    const input = z
+      .object({ carrierId: uuidSchema, planYear: z.coerce.number().int().min(2020).max(2100) })
+      .parse({ carrierId, planYear });
+
+    const file = formData.get("xlsx") ?? formData.get("file");
+    if (!(file instanceof File) || file.size === 0) throw new Error("An .xlsx file is required");
+    if (!file.name.toLowerCase().endsWith(".xlsx")) {
+      throw new Error("Only .xlsx workbooks are accepted");
+    }
+    if (file.size > 25 * 1024 * 1024) throw new Error("Workbook exceeds the 25 MB limit");
+
+    const db = getDb();
+    const carrier = await db.select().from(carriers).where(eq(carriers.id, input.carrierId));
+    if (!carrier[0]) return err("Carrier not found");
+
+    const storagePath = `workbooks/${input.carrierId}-${input.planYear}.xlsx`;
+    await uploadObject(
+      storagePath,
+      new Uint8Array(await file.arrayBuffer()),
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
+
+    const { ingestionJobId } = await enqueueIngestionJob({
+      kind: "xlsx_import",
+      queue: QUEUE_NAMES.xlsxImport,
+      targetId: input.carrierId,
+      payload: (jobId) => ({
+        ingestionJobId: jobId,
+        carrierId: input.carrierId,
+        planYear: input.planYear,
+        storagePath,
+      }),
+    });
+
+    await writeAudit(db, {
+      actorId: profile.id,
+      action: "carrier.workbook_imported",
+      entityType: "carrier",
+      entityId: input.carrierId,
+      meta: { planYear: input.planYear, fileName: file.name, ingestionJobId },
+    });
+
+    revalidatePath("/", "layout");
+    return ok({ ingestionJobId });
+  } catch (e) {
+    return err(errorMessage(e));
+  }
+}
+
 const cmsImportSchema = z.object({
   planYear: z.coerce.number().int().min(2020).max(2100),
   sourceUrl: z
