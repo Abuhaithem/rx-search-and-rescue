@@ -127,6 +127,7 @@ export const carriers = pgTable("carriers", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
+  logoPath: text("logo_path"), // object-storage key of the carrier logo
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -149,6 +150,8 @@ export const formularies = pgTable(
       indexCount?: number; // count from the document's own alphabetical index
       needsReview?: number;
       skippedPages?: number; // classifier-skipped non-table pages (no API call)
+      /** Plan names the extractor read off the document cover (wizard prefill). */
+      extractedPlanNames?: string[];
     }>(),
     activatedBy: uuid("activated_by").references(() => profiles.id),
     activatedAt: timestamp("activated_at", { withTimezone: true }),
@@ -316,6 +319,11 @@ export const planPharmacyNetworks = pgTable(
       .references(() => pharmacies.id, { onDelete: "cascade" }),
     status: networkStatus("status").notNull(),
     source: networkSource("source").notNull(),
+    /**
+     * Upload-wizard staging: staged rows are previews awaiting the admin's
+     * finalize step and are invisible to every analysis/agent query.
+     */
+    staged: boolean("staged").notNull().default(false),
     verifiedBy: uuid("verified_by").references(() => profiles.id),
     verifiedAt: timestamp("verified_at", { withTimezone: true }),
   },

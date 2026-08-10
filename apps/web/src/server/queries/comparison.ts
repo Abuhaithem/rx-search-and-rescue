@@ -171,6 +171,7 @@ export async function loadComparisonInputs(analysisId: string): Promise<Comparis
       .from(planPharmacyNetworks)
       .where(
         and(
+          eq(planPharmacyNetworks.staged, false),
           inArray(planPharmacyNetworks.pharmacyId, pharmacyIds),
           inArray(planPharmacyNetworks.planId, planIds),
         ),

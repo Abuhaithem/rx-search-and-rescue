@@ -85,6 +85,7 @@ export async function getAvailablePlans(clientId: string, planYear: number): Pro
       .where(
         and(
           eq(planPharmacyNetworks.pharmacyId, rankOnePharmacyId),
+          eq(planPharmacyNetworks.staged, false),
           inArray(
             planPharmacyNetworks.planId,
             inArea.map((p) => p.id),

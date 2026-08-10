@@ -44,6 +44,7 @@ export async function searchPharmaciesByZip(zip: string, planId: string): Promis
     .where(
       and(
         eq(planPharmacyNetworks.planId, planId),
+        eq(planPharmacyNetworks.staged, false),
         inArray(
           planPharmacyNetworks.pharmacyId,
           rows.map((r) => r.id),
