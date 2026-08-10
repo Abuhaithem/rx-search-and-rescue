@@ -73,12 +73,14 @@ function AppShell({
                 <div className="text-[11px] text-white/55">{organizationName}</div>
               ) : null}
             </div>
-            <div
-              aria-hidden
-              className="flex size-9 items-center justify-center rounded-full bg-harbor text-xs font-semibold text-white ring-1 ring-inset ring-white/15"
+            <Link
+              href="/settings"
+              aria-label="Settings"
+              title="Settings"
+              className="flex size-9 items-center justify-center rounded-full bg-harbor text-xs font-semibold text-white ring-1 ring-inset ring-white/15 transition-opacity hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
             >
               {initials || "·"}
-            </div>
+            </Link>
           </div>
         </div>
       </header>

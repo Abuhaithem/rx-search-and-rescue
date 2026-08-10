@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { cookies } from "next/headers";
-import { eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { getDb, profiles, sessions } from "@rxsr/db";
 import type { UserRole } from "@rxsr/core";
 
@@ -75,6 +75,21 @@ export async function getSessionProfile(): Promise<SessionProfile | null> {
     return null;
   }
   return { id: row.id, fullName: row.fullName, role: row.role };
+}
+
+/** After a password change: every other device's session dies, this one stays. */
+export async function invalidateOtherSessions(profileId: string): Promise<void> {
+  const cookieStore = await cookies();
+  const token = cookieStore.get(SESSION_COOKIE)?.value;
+  const db = getDb();
+  if (token) {
+    const keep = hashToken(token);
+    await db
+      .delete(sessions)
+      .where(and(eq(sessions.profileId, profileId), ne(sessions.tokenHash, keep)));
+  } else {
+    await db.delete(sessions).where(eq(sessions.profileId, profileId));
+  }
 }
 
 /**

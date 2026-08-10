@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Inbox } from "lucide-react";
 import type { AnalysisStatus } from "@rxsr/core";
+import { getPlanYears } from "@/server/queries/carriers";
 import { getWorkQueue } from "@/server/queries/work-queue";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -37,16 +38,15 @@ export default async function DashboardPage({
   const yearParam = typeof params.year === "string" ? Number(params.year) : NaN;
   const planYear = Number.isInteger(yearParam) ? yearParam : undefined;
 
-  const rows = await getWorkQueue({
-    status,
-    planYear,
-    search: search.trim() || undefined,
-  });
-
-  const currentYear = new Date().getFullYear();
-  const years = [...new Set([currentYear - 1, currentYear, currentYear + 1, ...rows.map((r) => r.planYear)])].sort(
-    (a, b) => b - a,
-  );
+  // Years come from the DB (plans ∪ formularies) — never synthesized.
+  const [rows, years] = await Promise.all([
+    getWorkQueue({
+      status,
+      planYear,
+      search: search.trim() || undefined,
+    }),
+    getPlanYears(new Date().getFullYear()),
+  ]);
 
   const queueRows: QueueRow[] = rows.map((row) => ({
     analysisId: row.analysisId,

@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { cookies } from "next/headers";
 import { Archivo, Public_Sans, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -29,9 +30,14 @@ export const viewport: Viewport = {
   themeColor: "#0e1d2f",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Server-read theme cookie: the class is on <html> before first paint — no flash.
+  const theme = (await cookies()).get("rxsr_theme")?.value === "dark" ? "dark" : "";
   return (
-    <html lang="en" className={`${archivo.variable} ${publicSans.variable} ${plexMono.variable}`}>
+    <html
+      lang="en"
+      className={`${archivo.variable} ${publicSans.variable} ${plexMono.variable} ${theme}`.trim()}
+    >
       {/* suppressHydrationWarning: browser extensions inject attributes into <body> before React hydrates */}
       <body suppressHydrationWarning>{children}</body>
     </html>
