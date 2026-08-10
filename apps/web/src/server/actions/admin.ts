@@ -512,6 +512,79 @@ export async function attachPharmacyDirectory(
   }
 }
 
+const LOGO_TYPES: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/webp": "webp",
+  "image/svg+xml": "svg",
+};
+const MAX_LOGO_BYTES = 2 * 1024 * 1024;
+
+/** formData: logo (png/jpeg/webp/svg, ≤2 MB). */
+export async function uploadCarrierLogo(
+  carrierId: string,
+  formData: FormData,
+): Promise<ActionResult<{ carrierId: string }>> {
+  try {
+    const profile = await requireRole("admin", "manager");
+    uuidSchema.parse(carrierId);
+    const file = formData.get("logo");
+    if (!(file instanceof File) || file.size === 0) throw new Error("A logo image is required");
+    const extension = LOGO_TYPES[file.type];
+    if (!extension) throw new Error("Logo must be PNG, JPEG, WebP, or SVG");
+    if (file.size > MAX_LOGO_BYTES) throw new Error("Logo exceeds the 2 MB limit");
+
+    const db = getDb();
+    const [carrier] = await db.select().from(carriers).where(eq(carriers.id, carrierId));
+    if (!carrier) return err("Carrier not found");
+
+    const logoPath = `carrier-logos/${carrierId}.${extension}`;
+    await uploadObject(logoPath, new Uint8Array(await file.arrayBuffer()), file.type);
+    await db.update(carriers).set({ logoPath }).where(eq(carriers.id, carrierId));
+
+    await writeAudit(db, {
+      actorId: profile.id,
+      action: "carrier.logo_uploaded",
+      entityType: "carrier",
+      entityId: carrierId,
+      meta: { logoPath },
+    });
+
+    revalidatePath("/", "layout");
+    return ok({ carrierId });
+  } catch (e) {
+    return err(errorMessage(e));
+  }
+}
+
+export async function removeCarrierLogo(
+  carrierId: string,
+): Promise<ActionResult<{ carrierId: string }>> {
+  try {
+    const profile = await requireRole("admin", "manager");
+    uuidSchema.parse(carrierId);
+    const db = getDb();
+    const [updated] = await db
+      .update(carriers)
+      .set({ logoPath: null })
+      .where(eq(carriers.id, carrierId))
+      .returning({ id: carriers.id });
+    if (!updated) return err("Carrier not found");
+
+    await writeAudit(db, {
+      actorId: profile.id,
+      action: "carrier.logo_removed",
+      entityType: "carrier",
+      entityId: carrierId,
+    });
+
+    revalidatePath("/", "layout");
+    return ok({ carrierId });
+  } catch (e) {
+    return err(errorMessage(e));
+  }
+}
+
 /** formData: xlsx (the agency carrier workbook). */
 export async function importCarrierWorkbook(
   carrierId: string,

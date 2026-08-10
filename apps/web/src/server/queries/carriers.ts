@@ -1,5 +1,6 @@
 import { desc } from "drizzle-orm";
 import { formularies, getDb, plans } from "@rxsr/db";
+import { createSignedDownloadUrl } from "../storage";
 import { isTierCostsComplete } from "./plans";
 
 export type FormularyStatus = (typeof formularies.$inferSelect)["status"];
@@ -27,6 +28,8 @@ export interface CarrierCatalogRow {
   id: string;
   name: string;
   slug: string;
+  /** Presigned GET URL for the logo (1 h); null when no logo uploaded. */
+  logoUrl: string | null;
   plans: CarrierPlanSummary[];
   formularies: CarrierFormularySummary[];
 }
@@ -55,28 +58,33 @@ export async function getCarrierCatalog(planYear: number): Promise<CarrierCatalo
     },
   });
 
-  return rows.map((carrier) => ({
-    id: carrier.id,
-    name: carrier.name,
-    slug: carrier.slug,
-    plans: carrier.plans.map((plan) => ({
-      id: plan.id,
-      name: plan.name,
-      contractPlanId: plan.contractPlanId,
-      premiumCents: plan.premiumCents,
-      curated: plan.curated,
-      tierCostsComplete: isTierCostsComplete(plan.tierCosts),
-      pharmacyDirectoryAttached: plan.pharmacyDirectoryPath !== null,
-      serviceAreaCount: plan.serviceAreas.length,
+  return Promise.all(
+    rows.map(async (carrier) => ({
+      id: carrier.id,
+      name: carrier.name,
+      slug: carrier.slug,
+      logoUrl: carrier.logoPath
+        ? await createSignedDownloadUrl(carrier.logoPath).catch(() => null)
+        : null,
+      plans: carrier.plans.map((plan) => ({
+        id: plan.id,
+        name: plan.name,
+        contractPlanId: plan.contractPlanId,
+        premiumCents: plan.premiumCents,
+        curated: plan.curated,
+        tierCostsComplete: isTierCostsComplete(plan.tierCosts),
+        pharmacyDirectoryAttached: plan.pharmacyDirectoryPath !== null,
+        serviceAreaCount: plan.serviceAreas.length,
+      })),
+      formularies: carrier.formularies.map((formulary) => ({
+        id: formulary.id,
+        label: formulary.label,
+        status: formulary.status,
+        totalEntries: formulary.stats?.totalEntries ?? 0,
+        needsReview: formulary.stats?.needsReview ?? 0,
+      })),
     })),
-    formularies: carrier.formularies.map((formulary) => ({
-      id: formulary.id,
-      label: formulary.label,
-      status: formulary.status,
-      totalEntries: formulary.stats?.totalEntries ?? 0,
-      needsReview: formulary.stats?.needsReview ?? 0,
-    })),
-  }));
+  );
 }
 
 /**

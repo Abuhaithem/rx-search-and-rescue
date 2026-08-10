@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/domain/empty-state";
 import { PageHeader } from "@/components/domain/page-header";
+import { CarrierLogo } from "@/components/domain/carrier-logo";
 import { formatUsd } from "@/components/domain/format";
 import { cn } from "@/lib/utils";
 import { CarrierDialog } from "./_components/carrier-dialog";
@@ -75,7 +76,8 @@ export default async function CarriersPage({ searchParams }: CarriersPageProps) 
                             : "hover:bg-fog text-deepwater",
                         )}
                       >
-                        <span className="min-w-0">
+                        <CarrierLogo name={carrier.name} logoUrl={carrier.logoUrl} size={28} />
+                        <span className="min-w-0 flex-1">
                           <span className="block truncate text-sm font-semibold">
                             {carrier.name}
                           </span>
@@ -116,11 +118,12 @@ export default async function CarriersPage({ searchParams }: CarriersPageProps) 
           {selected ? (
             <div className="space-y-6">
               <div className="flex items-center gap-3">
+                <CarrierLogo name={selected.name} logoUrl={selected.logoUrl} size={44} />
                 <h2 className="font-display text-xl font-extrabold text-deepwater">
                   {selected.name}
                 </h2>
                 <CarrierDialog
-                  carrier={{ id: selected.id, name: selected.name }}
+                  carrier={{ id: selected.id, name: selected.name, logoUrl: selected.logoUrl }}
                   trigger={
                     <Button variant="ghost" size="sm" aria-label="Rename carrier">
                       <Pencil className="size-4" />

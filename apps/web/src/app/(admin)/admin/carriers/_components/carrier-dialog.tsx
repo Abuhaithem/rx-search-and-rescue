@@ -3,7 +3,12 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { Loader2 } from "lucide-react";
-import { createCarrier, renameCarrier } from "@/server/actions/admin";
+import {
+  createCarrier,
+  removeCarrierLogo,
+  renameCarrier,
+  uploadCarrierLogo,
+} from "@/server/actions/admin";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -15,10 +20,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/components/ui/sonner";
+import { CarrierLogo } from "@/components/domain/carrier-logo";
 
 interface CarrierDialogProps {
-  /** Present = rename mode; absent = create mode. */
-  carrier?: { id: string; name: string };
+  /** Present = edit mode; absent = create mode. */
+  carrier?: { id: string; name: string; logoUrl: string | null };
   trigger: React.ReactNode;
 }
 
@@ -30,18 +36,41 @@ export function CarrierDialog({ carrier, trigger }: CarrierDialogProps) {
 
   const submit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const logoForm = new FormData(event.currentTarget);
+    const logoFile = logoForm.get("logo");
+    const hasLogo = logoFile instanceof File && logoFile.size > 0;
+
     startTransition(async () => {
-      const result = carrier
+      const saved = carrier
         ? await renameCarrier(carrier.id, name)
         : await createCarrier(name);
+      if (!saved.ok) {
+        toast.error(saved.error);
+        return;
+      }
+      if (hasLogo) {
+        const logo = await uploadCarrierLogo(saved.data.carrierId, logoForm);
+        if (!logo.ok) {
+          toast.error(`Carrier saved, but the logo failed: ${logo.error}`);
+        }
+      }
+      toast.success(carrier ? "Carrier updated" : `${name.trim()} created`);
+      setOpen(false);
+      if (!carrier) setName("");
+      router.push(`/admin/carriers?carrier=${saved.data.carrierId}`);
+      router.refresh();
+    });
+  };
+
+  const removeLogo = () => {
+    if (!carrier) return;
+    startTransition(async () => {
+      const result = await removeCarrierLogo(carrier.id);
       if (!result.ok) {
         toast.error(result.error);
         return;
       }
-      toast.success(carrier ? "Carrier renamed" : `${name.trim()} created`);
-      setOpen(false);
-      if (!carrier) setName("");
-      router.push(`/admin/carriers?carrier=${result.data.carrierId}`);
+      toast.success("Logo removed");
       router.refresh();
     });
   };
@@ -51,7 +80,7 @@ export function CarrierDialog({ carrier, trigger }: CarrierDialogProps) {
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>{carrier ? "Rename carrier" : "New carrier"}</DialogTitle>
+          <DialogTitle>{carrier ? "Edit carrier" : "New carrier"}</DialogTitle>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-4">
           <div className="space-y-1.5">
@@ -69,9 +98,37 @@ export function CarrierDialog({ carrier, trigger }: CarrierDialogProps) {
               Exactly as it should appear on plans and reports.
             </p>
           </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="carrier-logo">Logo</Label>
+            <div className="flex items-center gap-3">
+              {carrier ? <CarrierLogo name={carrier.name} logoUrl={carrier.logoUrl} size={40} /> : null}
+              <Input
+                id="carrier-logo"
+                name="logo"
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                className="flex-1"
+              />
+            </div>
+            <p className="text-xs text-steel">
+              PNG, JPEG, WebP, or SVG — up to 2 MB. Square works best.
+              {carrier?.logoUrl ? (
+                <>
+                  {" "}
+                  <button
+                    type="button"
+                    onClick={removeLogo}
+                    className="font-semibold text-notcovered hover:underline"
+                  >
+                    Remove current logo
+                  </button>
+                </>
+              ) : null}
+            </p>
+          </div>
           <Button type="submit" disabled={pending || name.trim().length < 2} className="w-full">
             {pending ? <Loader2 className="animate-spin" /> : null}
-            {carrier ? "Save name" : "Create carrier"}
+            {carrier ? "Save carrier" : "Create carrier"}
           </Button>
         </form>
       </DialogContent>
