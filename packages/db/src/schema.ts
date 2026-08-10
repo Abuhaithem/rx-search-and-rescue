@@ -227,6 +227,18 @@ export const plans = pgTable(
       .default({}),
     sobSourcePath: text("sob_source_path"), // Summary of Benefits PDF in Storage
     pharmacyDirectoryPath: text("pharmacy_directory_path"),
+    /** Object-storage key of this plan's Summary of Benefits PDF. */
+    sobPath: text("sob_path"),
+    /**
+     * Plan-level values extracted from the SoB, staged by the upload wizard
+     * and applied to the real columns only at Finalize (then cleared).
+     */
+    sobStaged: jsonb("sob_staged").$type<{
+      premiumCents?: number | null;
+      rxDeductibleCents?: number | null;
+      deductibleTiers?: number[];
+      tierLabels?: Record<string, string>;
+    } | null>(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -264,6 +276,10 @@ export const planTierCosts = pgTable(
     daysSupply: integer("days_supply").notNull(), // 30 retail, 90 mail order
     copayCents: integer("copay_cents"),
     coinsurancePct: numeric("coinsurance_pct", { precision: 5, scale: 2 }),
+    /** Per-fill coinsurance cap, e.g. Humana "25% up to $35" → 3500. */
+    maxCents: integer("max_cents"),
+    /** Upload-wizard staging: invisible to analysis/report until finalized. */
+    staged: boolean("staged").notNull().default(false),
     sourceNote: text("source_note"), // e.g. "2027 True Blue SoB p.4"
     verifiedBy: uuid("verified_by").references(() => profiles.id),
     verifiedAt: timestamp("verified_at", { withTimezone: true }),

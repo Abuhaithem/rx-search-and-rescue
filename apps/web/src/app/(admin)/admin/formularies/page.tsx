@@ -38,7 +38,11 @@ export default async function FormulariesPage({ searchParams }: PageProps) {
 
       <PageHeader
         title={`Formularies — Plan Year ${year}`}
-        actions={<UploadFormularyDialog carriers={carrierOptions} defaultYear={year} />}
+        actions={
+          <Button asChild>
+            <Link href={`/admin/formularies/upload?year=${year}`}>Load formulary →</Link>
+          </Button>
+        }
       />
 
       {!selected ? (

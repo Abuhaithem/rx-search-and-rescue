@@ -125,7 +125,14 @@ export async function loadComparisonInputs(analysisId: string): Promise<Comparis
         },
       },
       plans: {
-        with: { plan: { with: { carrier: true, tierCosts: true } } },
+        with: {
+          plan: {
+            with: {
+              carrier: true,
+              tierCosts: { where: (t, { eq: eqOp }) => eqOp(t.staged, false) },
+            },
+          },
+        },
         orderBy: (ap, { asc }) => [asc(ap.position)],
       },
       pharmacies: {

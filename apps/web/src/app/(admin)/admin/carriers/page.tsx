@@ -144,10 +144,10 @@ export default async function CarriersPage({ searchParams }: CarriersPageProps) 
                   <div className="flex items-center justify-between">
                     <p className="text-eyebrow">Formularies — {year}</p>
                     <Link
-                      href={`/admin/formularies?year=${year}`}
+                      href={selected.formularies.length === 0 ? `/admin/formularies/upload?year=${year}` : `/admin/formularies?year=${year}`}
                       className="text-sm font-semibold text-harbor hover:underline"
                     >
-                      {selected.formularies.length === 0 ? "Upload formulary →" : "Manage →"}
+                      {selected.formularies.length === 0 ? "Load formulary →" : "Manage →"}
                     </Link>
                   </div>
                   {selected.formularies.length === 0 ? (

@@ -60,7 +60,12 @@ export async function getAvailablePlans(clientId: string, planYear: number): Pro
 
   const planRows = await db.query.plans.findMany({
     where: and(eq(plans.planYear, planYear), eq(plans.curated, true)),
-    with: { carrier: true, formulary: true, tierCosts: true, serviceAreas: true },
+    with: {
+      carrier: true,
+      formulary: true,
+      tierCosts: { where: (t, { eq: eqOp }) => eqOp(t.staged, false) },
+      serviceAreas: true,
+    },
   });
 
   const inArea = planRows.filter((plan) => {
@@ -150,7 +155,12 @@ export async function getPlanCatalog(planYear: number): Promise<PlanCatalogRow[]
   const db = getDb();
   const rows = await db.query.plans.findMany({
     where: eq(plans.planYear, planYear),
-    with: { carrier: true, formulary: true, tierCosts: true, serviceAreas: true },
+    with: {
+      carrier: true,
+      formulary: true,
+      tierCosts: { where: (t, { eq: eqOp }) => eqOp(t.staged, false) },
+      serviceAreas: true,
+    },
     orderBy: (p, { asc }) => [asc(p.name)],
   });
   return rows.map((plan) => {

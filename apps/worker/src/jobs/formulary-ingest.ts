@@ -149,10 +149,21 @@ export async function runFormularyIngest(
       );
     }
 
+    // Plan names off the cover/front matter — wizard prefill only, never fatal.
+    const extractedPlanNames = await deps.extractor
+      .extractFormularyPlanNames(legendSource)
+      .then((r) => r.planNames)
+      .catch(() => []);
+
     await db
       .update(formularies)
       .set({
-        stats: { totalEntries, needsReview: needsReviewCount, skippedPages },
+        stats: {
+          totalEntries,
+          needsReview: needsReviewCount,
+          skippedPages,
+          extractedPlanNames,
+        },
         status: "qa",
       })
       .where(eq(formularies.id, job.formularyId));

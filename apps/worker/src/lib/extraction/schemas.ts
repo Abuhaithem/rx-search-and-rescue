@@ -54,6 +54,53 @@ export const pharmacyDirectoryExtractionSchema = z.object({
 });
 export type PharmacyDirectoryExtraction = z.infer<typeof pharmacyDirectoryExtractionSchema>;
 
+export const formularyPlanNamesSchema = z.object({
+  /** Exact plan names this formulary document says it applies to. */
+  planNames: z.array(z.string().min(1)).max(20),
+});
+export type FormularyPlanNamesExtraction = z.infer<typeof formularyPlanNamesSchema>;
+
+const sobChannelSchema = z.enum([
+  "preferred_retail",
+  "standard_retail",
+  "preferred_mail",
+  "standard_mail",
+]);
+
+export const sobExtractionSchema = z.object({
+  plans: z.array(
+    z.object({
+      planName: z.string().min(1),
+      /** Monthly plan premium; null when the document doesn't state it. */
+      premiumCents: z.number().int().min(0).nullable(),
+      rxDeductibleCents: z.number().int().min(0).nullable(),
+      /** Tiers the deductible applies to before cost sharing, e.g. [3,4,5]. */
+      deductibleTiers: z.array(z.number().int().min(1).max(6)),
+      /** Statutory insulin cap per 30-day fill when stated (usually 3500). */
+      insulinCapCents: z.number().int().min(0).nullable(),
+      tiers: z.array(
+        z.object({
+          tier: z.number().int().min(1).max(6),
+          /** Tier display name with the "Tier N:" prefix stripped. */
+          label: z.string().nullable(),
+          costs: z.array(
+            z.object({
+              channel: sobChannelSchema,
+              daysSupply: z.number().int().positive(),
+              copayCents: z.number().int().min(0).nullable(),
+              coinsurancePct: z.number().min(0).max(100).nullable(),
+              /** Per-fill coinsurance cap ("25% up to $35" → 3500). */
+              maxCents: z.number().int().min(0).nullable(),
+              covered: z.boolean(),
+            }),
+          ),
+        }),
+      ),
+    }),
+  ),
+});
+export type SobExtraction = z.infer<typeof sobExtractionSchema>;
+
 // ─── Hand-written JSON Schemas ───────────────────────────────────────────────
 
 const RXC_JSON_SCHEMA: JsonObjectSchema = {
@@ -227,6 +274,96 @@ const DIRECTORY_JSON_SCHEMA: JsonObjectSchema = {
   },
 };
 
+const PLAN_NAMES_JSON_SCHEMA: JsonObjectSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["planNames"],
+  properties: {
+    planNames: {
+      type: "array",
+      maxItems: 20,
+      items: { type: "string", minLength: 1 },
+      description: "Exact plan names this formulary applies to, as printed.",
+    },
+  },
+};
+
+const SOB_JSON_SCHEMA: JsonObjectSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["plans"],
+  properties: {
+    plans: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "planName",
+          "premiumCents",
+          "rxDeductibleCents",
+          "deductibleTiers",
+          "insulinCapCents",
+          "tiers",
+        ],
+        properties: {
+          planName: { type: "string", minLength: 1 },
+          premiumCents: { type: ["integer", "null"], minimum: 0 },
+          rxDeductibleCents: { type: ["integer", "null"], minimum: 0 },
+          deductibleTiers: {
+            type: "array",
+            items: { type: "integer", minimum: 1, maximum: 6 },
+          },
+          insulinCapCents: { type: ["integer", "null"], minimum: 0 },
+          tiers: {
+            type: "array",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["tier", "label", "costs"],
+              properties: {
+                tier: { type: "integer", minimum: 1, maximum: 6 },
+                label: { type: ["string", "null"] },
+                costs: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    additionalProperties: false,
+                    required: [
+                      "channel",
+                      "daysSupply",
+                      "copayCents",
+                      "coinsurancePct",
+                      "maxCents",
+                      "covered",
+                    ],
+                    properties: {
+                      channel: {
+                        type: "string",
+                        enum: [
+                          "preferred_retail",
+                          "standard_retail",
+                          "preferred_mail",
+                          "standard_mail",
+                        ],
+                      },
+                      daysSupply: { type: "integer", minimum: 1 },
+                      copayCents: { type: ["integer", "null"], minimum: 0 },
+                      coinsurancePct: { type: ["number", "null"], minimum: 0, maximum: 100 },
+                      maxCents: { type: ["integer", "null"], minimum: 0 },
+                      covered: { type: "boolean" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+};
+
 // ─── Specs ───────────────────────────────────────────────────────────────────
 
 export interface ExtractionSpec<T> {
@@ -291,6 +428,33 @@ Classify network status — carriers use DIFFERENT vocabulary for the same two t
 Always copy the document's verbatim cost-share wording into statusLabel (null when there is none). Never invent rows.`,
   jsonSchema: DIRECTORY_JSON_SCHEMA,
   parse: (input) => pharmacyDirectoryExtractionSchema.parse(input),
+};
+
+export const formularyPlanNamesSpec: ExtractionSpec<FormularyPlanNamesExtraction> = {
+  toolName: "record_formulary_plan_names",
+  description: "Record the plan names a formulary document applies to.",
+  systemPrompt: `You read the cover page and front matter of a CMS Part D formulary PDF. These documents state which insurance plans they apply to, e.g. "it means True Blue Rx 32PSP, True Blue Rx 33, True Blue Rx 34" or a single plan name on the cover like "HealthSpring Extra Rx (PDP)". Extract every plan name EXACTLY as printed, including parenthetical plan-type suffixes like (HMO), (PDP), (PPO). Do not invent names, do not include the carrier's company name alone, and return an empty array if no plan names are stated.`,
+  jsonSchema: PLAN_NAMES_JSON_SCHEMA,
+  parse: (input) => formularyPlanNamesSchema.parse(input),
+};
+
+export const sobExtractionSpec: ExtractionSpec<SobExtraction> = {
+  toolName: "record_summary_of_benefits",
+  description: "Record drug cost sharing from a Summary of Benefits PDF.",
+  systemPrompt: `You extract prescription-drug cost sharing from a Medicare Summary of Benefits (SB/SBC) PDF. One document may cover one or several plans — emit one plans[] element per plan, with the plan name exactly as printed.
+
+Per plan extract:
+- premiumCents: monthly plan premium in CENTS ("$0" → 0, "$45.20" → 4520); null if not stated.
+- rxDeductibleCents: the Part D / pharmacy deductible in cents; 0 when the document says "no deductible"; null if not stated.
+- deductibleTiers: which tiers sit behind the deductible (e.g. "does not apply to Tiers 1 and 2" with 5 tiers → [3,4,5]). Empty array when no deductible or unstated.
+- insulinCapCents: the per-30-day insulin cap when stated ("won't pay more than $35" → 3500); null otherwise.
+- tiers: one element per tier with its printed display label ("Preferred Generic" — strip the "Tier N:" prefix) and one costs[] element per cost cell:
+  - channel mapping: a single retail column covering ALL in-network retail → standard_retail. Separate preferred/standard retail columns map respectively. Mail-order columns map to preferred_mail/standard_mail ("standard mail" vs a named preferred mail pharmacy).
+  - daysSupply from the column header (30-day, 90-day, 100-day).
+  - "$6" → copayCents 600. "25%" → coinsurancePct 25. "25% up to $35" → coinsurancePct 25 AND maxCents 3500. "N/A" or "not covered" → covered false with null amounts.
+Copy numbers exactly as printed — never estimate, never fill gaps by analogy with other tiers.`,
+  jsonSchema: SOB_JSON_SCHEMA,
+  parse: (input) => sobExtractionSchema.parse(input),
 };
 
 // ─── Shared per-call helpers ─────────────────────────────────────────────────

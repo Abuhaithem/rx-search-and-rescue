@@ -101,20 +101,23 @@ export async function runPharmacyDirectory(
             pharmacyId = inserted.id;
           }
         }
-        await db
-          .insert(planPharmacyNetworks)
-          .values({
-            planId: job.planId,
-            pharmacyId,
-            status,
-            source: "directory",
-          })
-          .onConflictDoUpdate({
-            target: [planPharmacyNetworks.planId, planPharmacyNetworks.pharmacyId],
-            set: { status, source: "directory" },
-            // Agent-set rows outrank every automated source (same rule as CMS import).
-            setWhere: sql`${planPharmacyNetworks.source} <> 'agent'`,
-          });
+        for (const planId of job.planIds) {
+          await db
+            .insert(planPharmacyNetworks)
+            .values({
+              planId,
+              pharmacyId,
+              status,
+              source: "directory",
+              staged: job.staged ?? false,
+            })
+            .onConflictDoUpdate({
+              target: [planPharmacyNetworks.planId, planPharmacyNetworks.pharmacyId],
+              set: { status, source: "directory", staged: job.staged ?? false },
+              // Agent-set rows outrank every automated source (same rule as CMS import).
+              setWhere: sql`${planPharmacyNetworks.source} <> 'agent'`,
+            });
+        }
         linked += 1;
       }
     }

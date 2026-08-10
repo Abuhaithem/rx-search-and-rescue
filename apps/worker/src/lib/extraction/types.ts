@@ -6,7 +6,9 @@
 import type { FormularyPage, RxcExtraction } from "@rxsr/core/intake";
 import type {
   FormularyLegendExtraction,
+  FormularyPlanNamesExtraction,
   PharmacyDirectoryExtraction,
+  SobExtraction,
 } from "./schemas";
 
 export type ExtractionProviderName = "anthropic" | "openai" | "gemini";
@@ -40,6 +42,15 @@ export interface ExtractionProvider {
     pdfBase64: string,
     options?: ExtractionCallOptions,
   ): Promise<FormularyLegendExtraction>;
+  /** Reads the front matter; pass a front-matter sub-PDF, not the whole doc. */
+  extractFormularyPlanNames(
+    pdfBase64: string,
+    options?: ExtractionCallOptions,
+  ): Promise<FormularyPlanNamesExtraction>;
+  extractSummaryOfBenefits(
+    pdfBase64: string,
+    options?: ExtractionCallOptions,
+  ): Promise<SobExtraction>;
   extractPharmacyDirectoryRows(
     directoryText: string,
     options?: ExtractionCallOptions,

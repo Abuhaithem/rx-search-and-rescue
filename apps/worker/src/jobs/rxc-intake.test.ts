@@ -114,6 +114,12 @@ function fakeProvider(): { provider: ExtractionProvider; calls: string[] } {
     async extractFormularyLegend() {
       throw new Error("not used");
     },
+    async extractFormularyPlanNames() {
+      throw new Error("not used");
+    },
+    async extractSummaryOfBenefits() {
+      throw new Error("not used");
+    },
     async extractPharmacyDirectoryRows() {
       throw new Error("not used");
     },

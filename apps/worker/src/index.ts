@@ -39,6 +39,14 @@ async function main() {
       { connection, concurrency: 1 },
     ),
     new Worker(
+      QUEUE_NAMES.sobIngest,
+      async (job) => {
+        const { runSobIngest } = await import("./jobs/sob-ingest");
+        return runSobIngest(job.data);
+      },
+      { connection, concurrency: 1 },
+    ),
+    new Worker(
       QUEUE_NAMES.xlsxImport,
       async (job) => {
         const { runXlsxImport } = await import("./jobs/xlsx-import");

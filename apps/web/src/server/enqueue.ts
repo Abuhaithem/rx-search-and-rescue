@@ -8,6 +8,7 @@ export const QUEUE_NAMES = {
   rxcIntake: "rxc-intake",
   pharmacyDirectory: "pharmacy-directory",
   xlsxImport: "xlsx-import",
+  sobIngest: "sob-ingest",
   cmsImport: "cms-import",
 } as const;
 
@@ -18,6 +19,7 @@ export type IngestionKind =
   | "rxc"
   | "pharmacy_directory"
   | "xlsx_import"
+  | "sob"
   | "cms_import";
 
 // Survive Next.js dev-mode module reloads: one Redis connection + one Queue per name.

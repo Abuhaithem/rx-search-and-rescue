@@ -47,7 +47,10 @@ export async function getCarrierCatalog(planYear: number): Promise<CarrierCatalo
         where: (p, { eq }) => eq(p.planYear, planYear),
         orderBy: (p, { asc: ascOp }) => [ascOp(p.name)],
         with: {
-          tierCosts: { columns: { channel: true, tier: true } },
+          tierCosts: {
+            columns: { channel: true, tier: true },
+            where: (t, { eq }) => eq(t.staged, false),
+          },
           serviceAreas: { columns: { id: true } },
         },
       },

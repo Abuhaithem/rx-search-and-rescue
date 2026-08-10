@@ -8,6 +8,7 @@ export const QUEUE_NAMES = {
   rxcIntake: "rxc-intake",
   pharmacyDirectory: "pharmacy-directory",
   xlsxImport: "xlsx-import",
+  sobIngest: "sob-ingest",
   cmsImport: "cms-import",
 } as const;
 
@@ -26,7 +27,16 @@ export interface RxcIntakeJob {
 
 export interface PharmacyDirectoryJob {
   ingestionJobId: string;
-  planId: string;
+  /** One extraction pass, network rows written for every listed plan. */
+  planIds: string[];
+  storagePath: string;
+  /** Wizard staging: rows land invisible until Finalize. */
+  staged?: boolean;
+}
+
+export interface SobIngestJob {
+  ingestionJobId: string;
+  planIds: string[];
   storagePath: string;
 }
 

@@ -13,8 +13,10 @@ import {
   formularyLegendSpec,
   formularyPageSpec,
   formularyPageUserText,
+  formularyPlanNamesSpec,
   pharmacyDirectorySpec,
   rxcExtractionSpec,
+  sobExtractionSpec,
 } from "./schemas";
 import type { ExtractionProvider } from "./types";
 
@@ -134,6 +136,24 @@ export function createAnthropicProvider(
           pdfBlock(pdfBase64, false),
           { type: "text", text: "Extract the abbreviation legend." },
         ],
+        options?.model ?? model,
+        false,
+      );
+    },
+
+    async extractFormularyPlanNames(pdfBase64, options) {
+      return run(
+        formularyPlanNamesSpec,
+        [pdfBlock(pdfBase64, false), { type: "text", text: "List the plan names this formulary applies to." }],
+        options?.model ?? model,
+        false,
+      );
+    },
+
+    async extractSummaryOfBenefits(pdfBase64, options) {
+      return run(
+        sobExtractionSpec,
+        [pdfBlock(pdfBase64, false), { type: "text", text: "Extract the drug cost sharing from this Summary of Benefits." }],
         options?.model ?? model,
         false,
       );

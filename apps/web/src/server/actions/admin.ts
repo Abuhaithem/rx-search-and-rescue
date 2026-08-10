@@ -494,7 +494,7 @@ export async function attachPharmacyDirectory(
       kind: "pharmacy_directory",
       queue: QUEUE_NAMES.pharmacyDirectory,
       targetId: planId,
-      payload: (jobId) => ({ ingestionJobId: jobId, planId, storagePath }),
+      payload: (jobId) => ({ ingestionJobId: jobId, planIds: [planId], storagePath }),
     });
 
     await writeAudit(db, {

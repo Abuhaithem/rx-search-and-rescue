@@ -16,8 +16,10 @@ import {
   formularyLegendSpec,
   formularyPageSpec,
   formularyPageUserText,
+  formularyPlanNamesSpec,
   pharmacyDirectorySpec,
   rxcExtractionSpec,
+  sobExtractionSpec,
 } from "./schemas";
 import type { ExtractionProvider } from "./types";
 
@@ -111,6 +113,22 @@ export function createGeminiProvider(deps: GeminiProviderDeps = {}): ExtractionP
       return run(
         formularyLegendSpec,
         [pdfPart(pdfBase64), { text: "Extract the abbreviation legend." }],
+        options?.model ?? model,
+      );
+    },
+
+    async extractFormularyPlanNames(pdfBase64, options) {
+      return run(
+        formularyPlanNamesSpec,
+        [pdfPart(pdfBase64), { text: "List the plan names this formulary applies to." }],
+        options?.model ?? model,
+      );
+    },
+
+    async extractSummaryOfBenefits(pdfBase64, options) {
+      return run(
+        sobExtractionSpec,
+        [pdfPart(pdfBase64), { text: "Extract the drug cost sharing from this Summary of Benefits." }],
         options?.model ?? model,
       );
     },
