@@ -91,13 +91,34 @@ export const matchMethod = pgEnum("match_method", [
 
 // ─── Auth-adjacent ───────────────────────────────────────────────────────────
 
-/** Mirrors supabase auth.users; row created by trigger on signup. */
+/**
+ * Self-hosted credentials. email/passwordHash are nullable only for rows
+ * migrated from the previous auth provider before re-credentialing; a null
+ * in either column means the user cannot sign in.
+ */
 export const profiles = pgTable("profiles", {
-  id: uuid("id").primaryKey(), // = auth.users.id
+  id: uuid("id").primaryKey().defaultRandom(),
   fullName: text("full_name").notNull(),
+  email: text("email").unique(), // stored lowercased
+  passwordHash: text("password_hash"),
   role: userRole("role").notNull().default("agent"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/** Bearer sessions: the cookie holds the raw token, the DB only its SHA-256. */
+export const sessions = pgTable(
+  "sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    profileId: uuid("profile_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull().unique(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("sessions_profile_idx").on(t.profileId)],
+);
 
 // ─── Reference data: carriers, formularies, plans ────────────────────────────
 
@@ -118,7 +139,7 @@ export const formularies = pgTable(
     label: text("label").notNull(), // e.g. "2026 True Blue Rx (all True Blue plans)"
     formularyCode: text("formulary_code"), // e.g. "00026046 V08"
     versionDate: text("version_date"), // as printed, e.g. "01/01/2026"
-    sourceFilePath: text("source_file_path"), // Supabase Storage path of the PDF
+    sourceFilePath: text("source_file_path"), // object-storage key of the PDF
     sourcePageCount: integer("source_page_count"),
     status: formularyStatus("status").notNull().default("ingesting"),
     /** Extraction stats for the admin QA screen. */

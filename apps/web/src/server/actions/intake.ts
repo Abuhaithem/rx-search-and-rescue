@@ -11,7 +11,7 @@ import {
   getDb,
   inForcePolicies,
 } from "@rxsr/db";
-import { createSupabaseServiceClient } from "@/lib/supabase/server";
+import { uploadObject } from "../storage";
 import { err, errorMessage, ok, type ActionResult } from "../action-result";
 import { requireRole } from "../auth";
 import { writeAudit } from "../audit";
@@ -53,11 +53,7 @@ export async function uploadRxc(formData: FormData): Promise<ActionResult<{ clie
     if (!clientRow) return err("Failed to create client");
 
     const storagePath = `rxc/${clientRow.id}.pdf`;
-    const supabase = createSupabaseServiceClient();
-    const { error: uploadError } = await supabase.storage
-      .from("documents")
-      .upload(storagePath, file, { contentType: "application/pdf", upsert: true });
-    if (uploadError) return err(`Upload failed: ${uploadError.message}`);
+    await uploadObject(storagePath, new Uint8Array(await file.arrayBuffer()), "application/pdf");
 
     await db.update(clients).set({ sourceRxcPath: storagePath }).where(eq(clients.id, clientRow.id));
 

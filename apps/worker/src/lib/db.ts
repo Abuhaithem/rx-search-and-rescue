@@ -1,6 +1,6 @@
 /**
  * Worker DB plumbing: connection factory + ingestion_jobs bookkeeping.
- * The ingestion_jobs row is what the admin UI watches via Supabase Realtime,
+ * The ingestion_jobs row is what the admin UI polls for progress,
  * so every stage transition should land here promptly.
  */
 import { createDb, eq, ingestionJobs, type Db } from "@rxsr/db";

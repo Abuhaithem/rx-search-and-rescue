@@ -6,14 +6,13 @@ export type Db = ReturnType<typeof createDb>;
 
 /**
  * Creates a Drizzle client over a single postgres-js connection pool.
- * Supabase: use the pooled (transaction-mode) connection string in serverless
- * contexts and the direct string in the worker. `prepare: false` is required
- * for transaction-mode pooling (PgBouncer).
+ * `prepare: false` keeps the client safe behind any transaction-mode pooler
+ * (PgBouncer, RDS Proxy) and is harmless on a direct RDS connection.
  */
 export function createDb(url = process.env.DATABASE_URL) {
   if (!url) throw new Error("DATABASE_URL is not set");
-  // max is deliberately small: Supabase's session pooler caps total clients
-  // (15 on the base tier), and Next.js dev can instantiate several pools.
+  // max stays small: web + worker share one modest RDS instance, and Next.js
+  // dev-mode bundle duplication can instantiate several pools.
   const client = postgres(url, { prepare: false, max: 4, idle_timeout: 30 });
   return drizzle(client, { schema });
 }

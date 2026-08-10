@@ -14,7 +14,7 @@ import {
   plans,
 } from "@rxsr/db";
 import type { NetworkStatus } from "@rxsr/core";
-import { createSupabaseServiceClient } from "@/lib/supabase/server";
+import { uploadObject } from "../storage";
 import { err, errorMessage, ok, type ActionResult } from "../action-result";
 import { requireRole } from "../auth";
 import { writeAudit } from "../audit";
@@ -99,11 +99,7 @@ export async function uploadFormulary(
     if (!formularyRow) return err("Failed to create formulary");
 
     const storagePath = `formularies/${formularyRow.id}.pdf`;
-    const supabase = createSupabaseServiceClient();
-    const { error: uploadError } = await supabase.storage
-      .from("documents")
-      .upload(storagePath, file, { contentType: "application/pdf", upsert: true });
-    if (uploadError) return err(`Upload failed: ${uploadError.message}`);
+    await uploadObject(storagePath, new Uint8Array(await file.arrayBuffer()), "application/pdf");
 
     await db
       .update(formularies)
@@ -412,11 +408,7 @@ export async function attachPharmacyDirectory(
     if (!plan) return err("Plan not found");
 
     const storagePath = `pharmacy-directories/${planId}.pdf`;
-    const supabase = createSupabaseServiceClient();
-    const { error: uploadError } = await supabase.storage
-      .from("documents")
-      .upload(storagePath, file, { contentType: "application/pdf", upsert: true });
-    if (uploadError) return err(`Upload failed: ${uploadError.message}`);
+    await uploadObject(storagePath, new Uint8Array(await file.arrayBuffer()), "application/pdf");
 
     await db
       .update(plans)

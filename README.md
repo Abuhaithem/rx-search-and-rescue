@@ -16,25 +16,29 @@ Benefits tier costs, pharmacy directories); agents never open a formulary PDF.
 - **apps/worker** — Node + BullMQ. The only component calling external APIs
   (Anthropic extraction, RxNorm normalization, NPPES pharmacy registry). AI runs
   at ingestion time only; running an analysis is a deterministic SQL join.
-- **packages/db** — Drizzle schema (source of truth), migrations, RLS, seed.
+- **packages/db** — Drizzle schema (source of truth), migrations, seed. Auth is
+  self-hosted: `profiles` carries scrypt password hashes, `sessions` carries
+  hashed bearer tokens.
 - **packages/core** — pure domain logic: restriction grammar parser, analysis
   engine, pharmacy matching, report model. Deterministic; fully unit-tested.
 - **packages/report** — ReportModel → .docx (institutional ink-on-paper style).
-- **Supabase** — Postgres, Auth, Storage (PDFs + generated reports).
-  HIPAA note: use a Team/Enterprise project with the HIPAA add-on + BAA; client
-  medication lists are PHI-adjacent.
+- **AWS** — RDS Postgres, S3 (PDFs + generated reports), EC2 + docker-compose
+  (see `deploy/` and `docs/AWS_MIGRATION.md`). HIPAA note: accept the AWS BAA
+  in AWS Artifact; client medication lists are PHI-adjacent.
 
 ## Setup
 
 ```bash
 pnpm install
-cp .env.example .env        # fill in Supabase + Redis + Anthropic values
+cp .env.example .env        # fill in RDS + S3 + Redis + extraction values
 pnpm db:generate            # generate SQL migrations from the schema
-pnpm db:migrate             # apply migrations + RLS to Supabase Postgres
+pnpm db:migrate             # apply migrations to Postgres
+pnpm db:bootstrap you@agency.com <password>   # first admin user (also resets passwords)
 pnpm db:seed                # dev-only demo data (never in production)
 ```
 
-Create a Storage bucket named `documents` (private) in Supabase.
+Create a private S3 bucket for documents (or run MinIO/localstack locally) and
+point `S3_BUCKET` / `AWS_REGION` at it.
 
 ## Run
 

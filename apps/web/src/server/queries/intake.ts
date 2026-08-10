@@ -8,7 +8,7 @@ import {
   ingestionJobs,
   pharmacies,
 } from "@rxsr/db";
-import { createSupabaseServiceClient } from "@/lib/supabase/server";
+import { createSignedDownloadUrl } from "../storage";
 
 export type ClientRow = typeof clients.$inferSelect;
 export type ClientMedicationRow = typeof clientMedications.$inferSelect;
@@ -50,11 +50,7 @@ export async function getIntake(clientId: string): Promise<IntakeData | null> {
   let sourcePdfUrl: string | null = null;
   if (client.sourceRxcPath) {
     try {
-      const supabase = createSupabaseServiceClient();
-      const { data } = await supabase.storage
-        .from("documents")
-        .createSignedUrl(client.sourceRxcPath, 60 * 60);
-      sourcePdfUrl = data?.signedUrl ?? null;
+      sourcePdfUrl = await createSignedDownloadUrl(client.sourceRxcPath, 60 * 60);
     } catch {
       sourcePdfUrl = null;
     }

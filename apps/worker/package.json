@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.54.0",
+    "@aws-sdk/client-s3": "^3.1106.0",
     "@google/genai": "^2.13.0",
     "@rxsr/core": "workspace:*",
     "@rxsr/db": "workspace:*",

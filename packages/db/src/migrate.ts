@@ -2,7 +2,6 @@ import "./load-env";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
@@ -18,9 +17,5 @@ const db = drizzle(client);
 
 await migrate(db, { migrationsFolder: path.join(dir, "../migrations") });
 
-// Apply Supabase-specific SQL (RLS policies, auth trigger) — idempotent.
-const rls = readFileSync(path.join(dir, "../supabase/rls.sql"), "utf8");
-await client.unsafe(rls);
-
-console.log("migrations + RLS applied");
+console.log("migrations applied");
 await client.end();

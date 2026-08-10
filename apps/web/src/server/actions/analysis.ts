@@ -14,7 +14,7 @@ import {
 } from "@rxsr/db";
 import { runAnalysis, type CellResult } from "@rxsr/core/analysis";
 import { generateReportDocx } from "@rxsr/report";
-import { createSupabaseServiceClient } from "@/lib/supabase/server";
+import { uploadObject } from "../storage";
 import { err, errorMessage, ok, type ActionResult } from "../action-result";
 import { requireRole } from "../auth";
 import { writeAudit } from "../audit";
@@ -353,14 +353,11 @@ export async function approveAnalysis(
 
     const buffer = await generateReportDocx(model);
     const reportPath = `reports/${analysisId}.docx`;
-    const supabase = createSupabaseServiceClient();
-    const { error: uploadError } = await supabase.storage
-      .from("documents")
-      .upload(reportPath, buffer, {
-        contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        upsert: true,
-      });
-    if (uploadError) return err(`Report upload failed: ${uploadError.message}`);
+    await uploadObject(
+      reportPath,
+      new Uint8Array(buffer),
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    );
 
     await db.transaction(async (tx) => {
       await tx

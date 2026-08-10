@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { analyses, getDb } from "@rxsr/db";
 import { getProfile } from "@/server/queries/profile";
-import { createSupabaseServiceClient } from "@/lib/supabase/server";
+import { downloadObject } from "@/server/storage";
 
 export const dynamic = "force-dynamic";
 
@@ -26,19 +26,17 @@ export async function GET(
     return new NextResponse("Report not generated yet", { status: 404 });
   }
 
-  const supabase = createSupabaseServiceClient();
-  const { data, error } = await supabase.storage.from("documents").download(analysis.reportPath);
-  if (error || !data) {
+  const bytes = await downloadObject(analysis.reportPath);
+  if (!bytes) {
     return new NextResponse("Report file unavailable", { status: 404 });
   }
 
   const safeName = analysis.client.fullName.replace(/[^\w .,'-]/g, "").trim() || "Client";
-  const buffer = await data.arrayBuffer();
-  return new NextResponse(buffer, {
+  return new NextResponse(Buffer.from(bytes), {
     headers: {
       "Content-Type": DOCX_CONTENT_TYPE,
       "Content-Disposition": `attachment; filename="${safeName} - Medicare Analysis.docx"`,
-      "Content-Length": String(buffer.byteLength),
+      "Content-Length": String(bytes.byteLength),
     },
   });
 }

@@ -1,0 +1,13 @@
+# SITE_ADDRESS comes from .env via compose. With a real hostname Caddy
+# provisions and renews the Let's Encrypt certificate automatically.
+{$SITE_ADDRESS} {
+	encode gzip
+	reverse_proxy web:3000
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
+}

@@ -1,7 +1,7 @@
 /**
  * Queue names + job payload contracts. The web app enqueues by inserting an
  * ingestion_jobs row AND adding a BullMQ job; the worker consumes and updates
- * the row so the admin UI can render progress via Supabase Realtime.
+ * the row so the admin UI can render progress by polling.
  */
 export const QUEUE_NAMES = {
   formularyIngest: "formulary-ingest",
@@ -14,7 +14,7 @@ export const QUEUE_NAMES = {
 export interface FormularyIngestJob {
   ingestionJobId: string;
   formularyId: string;
-  /** Supabase Storage path of the uploaded PDF. */
+  /** Object-storage key of the uploaded PDF. */
   storagePath: string;
 }
 

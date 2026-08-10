@@ -48,8 +48,9 @@ admin.ts (role: admin|manager)
 auth.ts
 - `signIn(email, password)` / `signOut()`
 
-## Realtime
+## Live status
 
-Status chips subscribe to `analyses` / `ingestion_jobs` row changes via
-Supabase Realtime (client-side, anon key, RLS-safe reference tables only —
-PHI-bearing live updates poll via router.refresh() on an interval instead).
+Status chips poll: client components call `router.refresh()` on an interval
+while an `analyses` / `ingestion_jobs` row is in a running state (see
+`refresh-poller.tsx`). No client-side DB subscriptions — the browser never
+talks to Postgres.
