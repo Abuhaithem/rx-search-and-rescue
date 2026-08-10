@@ -139,13 +139,33 @@ export async function runXlsxImport(
     const claimed = new Set<string>();
     let networkLinks = 0;
     for (const rule of parsed.networkRules) {
-      const matches = await db
-        .select({ id: pharmacies.id })
-        .from(pharmacies)
-        .where(ilike(pharmacies.name, `%${rule.pattern}%`));
-      for (const pharmacy of matches) {
+      // Any of the rule's names matches ("Sav-On" or "Albertsons"), and every
+      // matched row learns the other names as altNames — so an RxC form
+      // writing either name resolves to the same pharmacy record.
+      const seen = new Map<string, { id: string; name: string; altNames: string[] }>();
+      for (const pattern of rule.patterns) {
+        const matches = await db
+          .select({ id: pharmacies.id, name: pharmacies.name, altNames: pharmacies.altNames })
+          .from(pharmacies)
+          .where(ilike(pharmacies.name, `%${pattern}%`));
+        for (const match of matches) seen.set(match.id, match);
+      }
+      for (const pharmacy of seen.values()) {
         if (claimed.has(pharmacy.id)) continue; // longer/earlier rule already decided
         claimed.add(pharmacy.id);
+
+        const lowerName = pharmacy.name.toLowerCase();
+        const aliases = rule.patterns.filter(
+          (p) =>
+            !lowerName.includes(p.toLowerCase()) &&
+            !pharmacy.altNames.some((a) => a.toLowerCase() === p.toLowerCase()),
+        );
+        if (aliases.length > 0) {
+          await db
+            .update(pharmacies)
+            .set({ altNames: [...pharmacy.altNames, ...aliases] })
+            .where(eq(pharmacies.id, pharmacy.id));
+        }
         for (const planId of networkPlanIds) {
           await db
             .insert(planPharmacyNetworks)

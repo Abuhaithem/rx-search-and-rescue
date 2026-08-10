@@ -185,8 +185,13 @@ export function parseTierPricingSheet(rows: SheetRows): TierPricingRow[] {
 export interface PharmacyNetworkRule {
   /** As printed, e.g. "Sav-On Pharmacy (inside Albertsons)". */
   label: string;
-  /** Core name used for ILIKE matching, e.g. "Sav-On". */
-  pattern: string;
+  /**
+   * Names that identify this chain, primary first: "Sav-On Pharmacy (inside
+   * Albertsons)" → ["Sav-On", "Albertsons"]. Every pattern matches DB rows,
+   * and non-primary names become altNames on matched pharmacies so an RxC
+   * form saying either name finds the same record.
+   */
+  patterns: string[];
   status: NetworkStatus;
   note: string | null;
 }
@@ -208,6 +213,25 @@ export function chainPattern(label: string): string {
     .trim();
 }
 
+/**
+ * All names identifying a chain, primary first. Parentheticals that NAME a
+ * brand ("inside Albertsons", "part of Kroger") yield aliases; descriptor
+ * parentheticals ("retail", "own branding") do not.
+ */
+export function chainPatterns(label: string): string[] {
+  const patterns = [chainPattern(label)];
+  for (const match of label.matchAll(/\(([^)]*)\)/g)) {
+    const alias = match[1]?.match(/^(?:inside|in|part of|owned by|formerly)\s+(.+)$/i)?.[1];
+    if (alias) {
+      const cleaned = chainPattern(alias);
+      if (cleaned && !patterns.some((p) => p.toLowerCase() === cleaned.toLowerCase())) {
+        patterns.push(cleaned);
+      }
+    }
+  }
+  return patterns.filter((p) => p !== "");
+}
+
 export function parsePharmacyNetworkSheet(rows: SheetRows): PharmacyNetworkRule[] {
   const header = findHeader(rows, [/^pharmacy$/, /status/]);
   if (!header) return [];
@@ -220,17 +244,17 @@ export function parsePharmacyNetworkSheet(rows: SheetRows): PharmacyNetworkRule[
     const label = cellText(row[nameCol]);
     const status = parseNetworkStatus(row[statusCol]);
     if (label === "" || status === null) continue;
-    const pattern = chainPattern(label);
-    if (pattern === "") continue;
+    const patterns = chainPatterns(label);
+    if (patterns.length === 0) continue;
     rules.push({
       label,
-      pattern,
+      patterns,
       status,
       note: noteCol === null ? null : cellText(row[noteCol]) || null,
     });
   }
-  // Longest pattern first so "CVS Specialty" claims its pharmacies before "CVS".
-  return rules.sort((a, b) => b.pattern.length - a.pattern.length);
+  // Longest primary pattern first so "CVS Specialty" claims before "CVS".
+  return rules.sort((a, b) => (b.patterns[0]?.length ?? 0) - (a.patterns[0]?.length ?? 0));
 }
 
 // ─── Sheet discovery ─────────────────────────────────────────────────────────

@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   chainPattern,
+  chainPatterns,
   parseCarrierWorkbook,
   parseCostCell,
   parseDaysSupply,
@@ -70,6 +71,19 @@ describe("cell helpers", () => {
     expect(chainPattern("CVS Pharmacy (retail)")).toBe("CVS");
     expect(chainPattern("CVS Specialty")).toBe("CVS Specialty");
     expect(chainPattern("Walmart Pharmacy")).toBe("Walmart");
+  });
+
+  it("extracts brand aliases from naming parentheticals only", () => {
+    expect(chainPatterns("Sav-On Pharmacy (inside Albertsons)")).toEqual([
+      "Sav-On",
+      "Albertsons",
+    ]);
+    expect(chainPatterns("CVS Pharmacy (retail)")).toEqual(["CVS"]);
+    expect(chainPatterns("Albertsons Pharmacy (own branding)")).toEqual(["Albertsons"]);
+    expect(chainPatterns("Fred Meyer Pharmacy (part of Kroger)")).toEqual([
+      "Fred Meyer",
+      "Kroger",
+    ]);
   });
 });
 
