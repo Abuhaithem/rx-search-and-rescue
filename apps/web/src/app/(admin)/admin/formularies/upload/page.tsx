@@ -92,7 +92,7 @@ export default async function FormularyWizardPage({ searchParams }: WizardPagePr
         description={`Plan year ${formulary.planYear}`}
         backHref={`/admin/carriers?year=${formulary.planYear}`}
       />
-      <WizardStepper current={step} />
+      <WizardStepper current={step} formularyId={formulary.id} />
 
       {failedJob ? (
         <Card className="border-notcovered/40 bg-notcovered-soft/40">
@@ -219,9 +219,14 @@ export default async function FormularyWizardPage({ searchParams }: WizardPagePr
               plans={state.plans.map((p) => ({ id: p.id, name: p.name, sobPath: p.sobPath }))}
             />
             <div className="flex items-center justify-between border-t border-mist/55 pt-4">
-              <p className="text-xs text-steel">
-                {runningJob ? runningJob.message : "Upload one SBC per plan (or one covering several)."}
-              </p>
+              <div className="flex items-center gap-4">
+                <Link href={stepHref(2)} className="text-sm font-semibold text-steel hover:text-deepwater">
+                  ← Formulary preview
+                </Link>
+                <p className="text-xs text-steel">
+                  {runningJob ? runningJob.message : "Upload one SBC per plan (or one covering several)."}
+                </p>
+              </div>
               <Button asChild variant="secondary">
                 <Link href={stepHref(4)}>Preview cost sharing →</Link>
               </Button>
@@ -296,7 +301,10 @@ export default async function FormularyWizardPage({ searchParams }: WizardPagePr
               </CardContent>
             </Card>
           ))}
-          <div className="flex justify-end">
+          <div className="flex items-center justify-between">
+            <Button asChild variant="secondary">
+              <Link href={stepHref(3)}>← Not right? Change the Summary of Benefits</Link>
+            </Button>
             <Button asChild>
               <Link href={stepHref(5)}>Looks right — continue to finalize →</Link>
             </Button>
@@ -337,7 +345,12 @@ export default async function FormularyWizardPage({ searchParams }: WizardPagePr
             <p className="text-xs text-steel">
               This is the only step that changes what agents see. Everything before it was staging.
             </p>
-            <FinalizeButton formularyId={formulary.id} planYear={formulary.planYear} />
+            <div className="flex items-center gap-3">
+              <Button asChild variant="secondary">
+                <Link href={stepHref(4)}>← Back to preview</Link>
+              </Button>
+              <FinalizeButton formularyId={formulary.id} planYear={formulary.planYear} />
+            </div>
           </CardContent>
         </Card>
       ) : null}
