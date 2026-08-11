@@ -1,0 +1,1 @@
+ALTER TABLE "analyses" ADD COLUMN "report_pdf_path" text;

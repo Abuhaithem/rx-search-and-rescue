@@ -27,6 +27,8 @@ interface ReportEditorProps {
   clientId: string;
   model: ReportModel;
   status: AnalysisStatus;
+  /** The .docx→PDF conversion job has finished for the current approval. */
+  pdfReady: boolean;
 }
 
 const CHECKLIST = [
@@ -51,7 +53,7 @@ function StatusBadge({ status }: { status: AnalysisStatus }) {
   );
 }
 
-export function ReportEditor({ analysisId, clientId, model, status }: ReportEditorProps) {
+export function ReportEditor({ analysisId, clientId, model, status, pdfReady }: ReportEditorProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
@@ -453,13 +455,29 @@ export function ReportEditor({ analysisId, clientId, model, status }: ReportEdit
                 <CardTitle>After approval</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                <a
-                  href={`/analysis/${analysisId}/report/download`}
-                  className="inline-flex items-center gap-2 text-sm font-semibold text-deepwater underline-offset-2 hover:underline"
-                >
-                  <Download className="size-4" />
-                  Download Word document
-                </a>
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+                  <a
+                    href={`/analysis/${analysisId}/report/download`}
+                    className="inline-flex items-center gap-2 text-sm font-semibold text-deepwater underline-offset-2 hover:underline"
+                  >
+                    <Download className="size-4" />
+                    Word document
+                  </a>
+                  {pdfReady ? (
+                    <a
+                      href={`/analysis/${analysisId}/report/download?format=pdf`}
+                      className="inline-flex items-center gap-2 text-sm font-semibold text-deepwater underline-offset-2 hover:underline"
+                    >
+                      <Download className="size-4" />
+                      PDF
+                    </a>
+                  ) : (
+                    <span className="inline-flex items-center gap-2 text-sm text-steel">
+                      <Download className="size-4" />
+                      PDF preparing…
+                    </span>
+                  )}
+                </div>
                 {status === "approved" ? (
                   <div>
                     <Button variant="secondary" size="sm" onClick={deliver} disabled={pending}>

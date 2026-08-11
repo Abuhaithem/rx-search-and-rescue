@@ -9,6 +9,7 @@ export const QUEUE_NAMES = {
   pharmacyDirectory: "pharmacy-directory",
   xlsxImport: "xlsx-import",
   sobIngest: "sob-ingest",
+  reportPdf: "report-pdf",
   cmsImport: "cms-import",
 } as const;
 
@@ -52,6 +53,13 @@ export interface XlsxImportJob {
   carrierId: string;
   planYear: number;
   storagePath: string;
+}
+
+export interface ReportPdfJob {
+  ingestionJobId: string;
+  analysisId: string;
+  /** Storage key of the approved .docx. */
+  docxPath: string;
 }
 
 export interface CmsImportJob {

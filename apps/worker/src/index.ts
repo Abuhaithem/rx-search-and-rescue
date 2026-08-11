@@ -39,6 +39,14 @@ async function main() {
       { connection, concurrency: 1 },
     ),
     new Worker(
+      QUEUE_NAMES.reportPdf,
+      async (job) => {
+        const { runReportPdf } = await import("./jobs/report-pdf");
+        return runReportPdf(job.data);
+      },
+      { connection, concurrency: 1 },
+    ),
+    new Worker(
       QUEUE_NAMES.sobIngest,
       async (job) => {
         const { runSobIngest } = await import("./jobs/sob-ingest");

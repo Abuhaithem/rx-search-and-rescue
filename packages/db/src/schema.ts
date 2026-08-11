@@ -468,6 +468,7 @@ export const analyses = pgTable(
     approvedAt: timestamp("approved_at", { withTimezone: true }),
     deliveredAt: timestamp("delivered_at", { withTimezone: true }),
     reportPath: text("report_path"), // generated .docx in Storage
+    reportPdfPath: text("report_pdf_path"), // PDF converted from the .docx (worker job)
     createdBy: uuid("created_by").references(() => profiles.id),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

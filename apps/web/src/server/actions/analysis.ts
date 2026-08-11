@@ -18,6 +18,7 @@ import { uploadObject } from "../storage";
 import { err, errorMessage, ok, type ActionResult } from "../action-result";
 import { requireRole } from "../auth";
 import { writeAudit } from "../audit";
+import { enqueueIngestionJob, QUEUE_NAMES } from "../enqueue";
 import { loadComparisonInputs } from "../queries/comparison";
 import { getCurrentDrugPlanId, isTierCostsComplete } from "../queries/plans";
 import { buildReportModel } from "../report/build-model";
@@ -367,6 +368,7 @@ export async function approveAnalysis(
           approvedBy: profile.id,
           approvedAt: new Date(),
           reportPath,
+          reportPdfPath: null, // regenerated below from the fresh .docx
           updatedAt: new Date(),
         })
         .where(eq(analyses.id, analysisId));
@@ -377,6 +379,13 @@ export async function approveAnalysis(
         entityId: analysisId,
         meta: { reportPath },
       });
+    });
+
+    await enqueueIngestionJob({
+      kind: "report_pdf",
+      queue: QUEUE_NAMES.reportPdf,
+      targetId: analysisId,
+      payload: (jobId) => ({ ingestionJobId: jobId, analysisId, docxPath: reportPath }),
     });
 
     revalidatePath("/", "layout");

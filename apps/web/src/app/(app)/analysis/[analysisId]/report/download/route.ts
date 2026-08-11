@@ -10,10 +10,11 @@ const DOCX_CONTENT_TYPE =
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ analysisId: string }> },
 ) {
   const { analysisId } = await params;
+  const wantsPdf = new URL(request.url).searchParams.get("format") === "pdf";
 
   const profile = await getProfile();
   if (!profile) return new NextResponse("Unauthorized", { status: 401 });
@@ -25,17 +26,23 @@ export async function GET(
   if (!analysis?.reportPath) {
     return new NextResponse("Report not generated yet", { status: 404 });
   }
+  if (wantsPdf && !analysis.reportPdfPath) {
+    return new NextResponse("PDF is still being prepared — try again in a moment", {
+      status: 404,
+    });
+  }
 
-  const bytes = await downloadObject(analysis.reportPath);
+  const bytes = await downloadObject(wantsPdf ? analysis.reportPdfPath! : analysis.reportPath);
   if (!bytes) {
     return new NextResponse("Report file unavailable", { status: 404 });
   }
 
   const safeName = analysis.client.fullName.replace(/[^\w .,'-]/g, "").trim() || "Client";
+  const extension = wantsPdf ? "pdf" : "docx";
   return new NextResponse(Buffer.from(bytes), {
     headers: {
-      "Content-Type": DOCX_CONTENT_TYPE,
-      "Content-Disposition": `attachment; filename="${safeName} - Medicare Analysis.docx"`,
+      "Content-Type": wantsPdf ? "application/pdf" : DOCX_CONTENT_TYPE,
+      "Content-Disposition": `attachment; filename="${safeName} - Medicare Analysis.${extension}"`,
       "Content-Length": String(bytes.byteLength),
     },
   });

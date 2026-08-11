@@ -23,6 +23,7 @@ export default async function ReportPage({
       clientId={comparison.client.id}
       model={model}
       status={comparison.analysis.status}
+      pdfReady={comparison.analysis.reportPdfPath !== null}
     />
   );
 }

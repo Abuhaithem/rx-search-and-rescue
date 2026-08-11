@@ -1,6 +1,8 @@
 # Build from the repo root: docker build -f apps/worker/Dockerfile .
 FROM node:22-alpine
-RUN corepack enable
+# LibreOffice converts approved report .docx files to PDF (jobs/report-pdf).
+# Liberation fonts keep Times/Arial metrics faithful in the output.
+RUN apk add --no-cache libreoffice font-liberation && corepack enable
 WORKDIR /app
 
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json tsconfig.base.json ./

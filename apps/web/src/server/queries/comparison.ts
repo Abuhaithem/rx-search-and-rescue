@@ -373,6 +373,7 @@ export interface ComparisonData {
     status: AnalysisStatus;
     planYear: number;
     includeMailOrder: boolean;
+    reportPdfPath: string | null;
   };
   client: ClientRow;
   plans: ComparisonPlanColumn[];
@@ -564,6 +565,7 @@ export async function getComparison(analysisId: string): Promise<ComparisonData 
       status: inputs.analysis.status,
       planYear: inputs.analysis.planYear,
       includeMailOrder: inputs.analysis.includeMailOrder,
+      reportPdfPath: inputs.analysis.reportPdfPath,
     },
     client: inputs.client,
     plans: planColumns,
