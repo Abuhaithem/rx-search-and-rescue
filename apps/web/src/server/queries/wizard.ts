@@ -176,6 +176,16 @@ export async function getWizardState(formularyId: string): Promise<WizardState |
     .orderBy(pharmacies.name)
     .limit(15);
 
+  // Only the LATEST job of each kind speaks for its pipeline — a retry that
+  // succeeds (or is running) silences the previous failure's banner.
+  const latestJobPerKind: WizardJobStatus[] = [];
+  const seenKinds = new Set<string>();
+  for (const job of jobs) {
+    if (seenKinds.has(job.kind)) continue;
+    seenKinds.add(job.kind);
+    latestJobPerKind.push(job);
+  }
+
   return {
     formulary: {
       id: formulary.id,
@@ -205,6 +215,6 @@ export async function getWizardState(formularyId: string): Promise<WizardState |
     })),
     stagedNetwork: { total: stagedTotal, byStatus, sample },
     liveNetworkCount: liveCount?.value ?? 0,
-    jobs,
+    jobs: latestJobPerKind,
   };
 }
