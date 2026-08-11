@@ -61,22 +61,36 @@ export async function runSobIngest(
 
       const inserts: (typeof planTierCosts.$inferInsert)[] = [];
       const tierLabels: Record<string, string> = {};
+      let bothFieldsFixed = 0;
       for (const tier of block.tiers) {
         if (tier.label) tierLabels[`t${tier.tier}`] = tier.label;
         for (const cost of tier.costs) {
           if (!cost.covered) continue;
+          // A cell is a copay OR a coinsurance, never both. When the model
+          // sets both, a $0 copay is noise beside the percentage, and a
+          // positive copay is a misplaced per-fill cap ("25% up to $35").
+          let copayCents = cost.copayCents;
+          let maxCents = cost.maxCents;
+          if (copayCents !== null && cost.coinsurancePct !== null) {
+            if (copayCents > 0 && maxCents === null) maxCents = copayCents;
+            copayCents = null;
+            bothFieldsFixed += 1;
+          }
           inserts.push({
             planId: plan.id,
             channel: cost.channel,
             tier: `t${tier.tier}` as CostTier,
             daysSupply: cost.daysSupply,
-            copayCents: cost.copayCents,
+            copayCents,
             coinsurancePct: cost.coinsurancePct === null ? null : String(cost.coinsurancePct),
-            maxCents: cost.maxCents,
+            maxCents,
             staged: true,
             sourceNote: `SoB import (${job.storagePath.split("/").pop()})`,
           });
         }
+      }
+      if (bothFieldsFixed > 0) {
+        warnings.push(`${plan.name}: ${bothFieldsFixed} cells had copay+coinsurance — kept the coinsurance`);
       }
       if (block.insulinCapCents !== null) {
         const channels = [...new Set(inserts.map((i) => i.channel))];
