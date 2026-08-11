@@ -328,7 +328,7 @@ export function FinalizeButton({
         return;
       }
       toast.success("Formulary activated — everything is live");
-      router.push(`/admin/formularies?year=${planYear}`);
+      router.push(`/admin/carriers?year=${planYear}`);
     });
   };
 

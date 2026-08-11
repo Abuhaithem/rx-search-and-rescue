@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getCarrierCatalog, getPlanYears } from "@/server/queries/carriers";
+import { getFormularyReviewRows } from "@/server/queries/formularies";
 import { getWizardState, type WizardStagedTierCost } from "@/server/queries/wizard";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -10,6 +11,7 @@ import { PageHeader } from "@/components/domain/page-header";
 import { RestrictionChip } from "@/components/domain/restriction-chip";
 import { formatUsd } from "@/components/domain/format";
 import { RefreshPoller } from "../_components/refresh-poller";
+import { ReviewTable } from "../_components/review-table";
 import {
   DirectoryUploadForm,
   FinalizeButton,
@@ -55,7 +57,7 @@ export default async function FormularyWizardPage({ searchParams }: WizardPagePr
         <PageHeader
           title="Load a formulary"
           description="Four uploads, three previews — nothing goes live until the final step."
-          backHref={`/admin/formularies?year=${year}`}
+          backHref={`/admin/carriers?year=${year}`}
         />
         <WizardStepper current={1} />
         <Card>
@@ -74,6 +76,10 @@ export default async function FormularyWizardPage({ searchParams }: WizardPagePr
   const state = await getWizardState(params.formulary);
   if (!state) notFound();
   const step = Math.min(Math.max(Number(params.step) || 2, 2), 7);
+  const reviewRows =
+    step === 2 && state.needsReviewCount > 0
+      ? await getFormularyReviewRows(params.formulary)
+      : [];
   const { formulary } = state;
   const stepHref = (n: number) => `/admin/formularies/upload?formulary=${formulary.id}&step=${n}`;
   const runningJob = state.jobs.find((j) => j.status === "queued" || j.status === "running");
@@ -86,7 +92,7 @@ export default async function FormularyWizardPage({ searchParams }: WizardPagePr
       <PageHeader
         title={`${formulary.carrierName} — ${formulary.label}`}
         description={`Plan year ${formulary.planYear}`}
-        backHref={`/admin/formularies?year=${formulary.planYear}`}
+        backHref={`/admin/carriers?year=${formulary.planYear}`}
       />
       <WizardStepper current={step} />
 
@@ -128,12 +134,7 @@ export default async function FormularyWizardPage({ searchParams }: WizardPagePr
                       {state.needsReviewCount}
                     </p>
                     {state.needsReviewCount > 0 ? (
-                      <Link
-                        href={`/admin/formularies?year=${formulary.planYear}`}
-                        className="text-xs font-semibold text-harbor hover:underline"
-                      >
-                        Resolve in QA →
-                      </Link>
+                      <p className="text-xs text-steel">Resolve the flagged rows below.</p>
                     ) : null}
                   </CardContent>
                 </Card>
@@ -191,6 +192,8 @@ export default async function FormularyWizardPage({ searchParams }: WizardPagePr
                   </p>
                 </CardContent>
               </Card>
+
+              {reviewRows.length > 0 ? <ReviewTable rows={reviewRows} /> : null}
 
               <Card>
                 <CardContent className="p-6">

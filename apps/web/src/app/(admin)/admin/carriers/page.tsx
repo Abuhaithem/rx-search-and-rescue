@@ -149,10 +149,10 @@ export default async function CarriersPage({ searchParams }: CarriersPageProps) 
                   <div className="flex items-center justify-between">
                     <p className="text-eyebrow">Formularies — {year}</p>
                     <Link
-                      href={selected.formularies.length === 0 ? `/admin/formularies/upload?year=${year}` : `/admin/formularies?year=${year}`}
+                      href={`/admin/formularies/upload?year=${year}`}
                       className="text-sm font-semibold text-harbor hover:underline"
                     >
-                      {selected.formularies.length === 0 ? "Load formulary →" : "Manage →"}
+                      {selected.formularies.length === 0 ? "Load formulary →" : "Load another →"}
                     </Link>
                   </div>
                   {selected.formularies.length === 0 ? (
@@ -164,9 +164,18 @@ export default async function CarriersPage({ searchParams }: CarriersPageProps) 
                     <ul className="divide-y divide-mist/55">
                       {selected.formularies.map((formulary) => (
                         <li key={formulary.id} className="flex items-center justify-between gap-3 py-2.5">
-                          <span className="min-w-0 truncate text-sm font-medium text-deepwater">
-                            {formulary.label}
-                          </span>
+                          {formulary.status === "active" ? (
+                            <span className="min-w-0 truncate text-sm font-medium text-deepwater">
+                              {formulary.label}
+                            </span>
+                          ) : (
+                            <Link
+                              href={`/admin/formularies/upload?formulary=${formulary.id}&step=2`}
+                              className="min-w-0 truncate text-sm font-medium text-deepwater hover:underline"
+                            >
+                              {formulary.label} — resume setup →
+                            </Link>
+                          )}
                           <span className="flex shrink-0 items-center gap-2">
                             {formulary.needsReview > 0 ? (
                               <span className="rounded-chip bg-restricted-soft px-2 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-[0.1em] text-restricted">
