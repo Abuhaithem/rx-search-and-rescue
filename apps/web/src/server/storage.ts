@@ -4,7 +4,7 @@
  * (S3_BUCKET). Credentials come from the standard AWS chain: instance role in
  * production, env/SSO locally.
  */
-import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 function getBucket(): string {
@@ -63,4 +63,15 @@ export async function createSignedDownloadUrl(
     new GetObjectCommand({ Bucket: getBucket(), Key: normalizeKey(path) }),
     { expiresIn: expiresInSeconds },
   );
+}
+
+/** Best-effort delete — cleanup paths must never fail the caller. */
+export async function deleteObject(path: string): Promise<void> {
+  try {
+    await getClient().send(
+      new DeleteObjectCommand({ Bucket: getBucket(), Key: normalizeKey(path) }),
+    );
+  } catch {
+    // Orphaned objects are acceptable; a failed delete is not worth surfacing.
+  }
 }

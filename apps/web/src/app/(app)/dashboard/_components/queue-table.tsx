@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import type { AnalysisStatus } from "@rxsr/core";
 import { StatusChip } from "@/components/domain/status-chip";
 import { Table, TBody, TCell, TH, THead, TRow } from "@/components/ui/table";
+import { DeleteAnalysisButton } from "./delete-analysis-button";
 
 export interface QueueRow {
   analysisId: string;
@@ -44,6 +45,9 @@ export function QueueTable({ rows }: { rows: QueueRow[] }) {
           <TH>Plans compared</TH>
           <TH>Status</TH>
           <TH>Last updated</TH>
+          <TH className="w-12">
+            <span className="sr-only">Actions</span>
+          </TH>
         </tr>
       </THead>
       <TBody>
@@ -68,6 +72,9 @@ export function QueueTable({ rows }: { rows: QueueRow[] }) {
             </TCell>
             <TCell className="text-steel" suppressHydrationWarning>
               {formatRelative(row.updatedAtIso)}
+            </TCell>
+            <TCell className="w-12" onClick={(e) => e.stopPropagation()}>
+              <DeleteAnalysisButton analysisId={row.analysisId} clientName={row.clientName} />
             </TCell>
           </TRow>
         ))}

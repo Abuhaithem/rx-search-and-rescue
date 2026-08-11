@@ -8,13 +8,14 @@ import {
   analysisPharmacies,
   analysisPlans,
   analysisResults,
+  clients,
   getDb,
   plans,
   reportOverrides,
 } from "@rxsr/db";
 import { runAnalysis, type CellResult } from "@rxsr/core/analysis";
 import { generateReportDocx } from "@rxsr/report";
-import { uploadObject } from "../storage";
+import { deleteObject, uploadObject } from "../storage";
 import { err, errorMessage, ok, type ActionResult } from "../action-result";
 import { requireRole } from "../auth";
 import { writeAudit } from "../audit";
@@ -422,6 +423,54 @@ export async function markDelivered(
 
     revalidatePath("/", "layout");
     return ok({ analysisId });
+  } catch (e) {
+    return err(errorMessage(e));
+  }
+}
+
+/**
+ * Delete the analysis AND its client — medications, pharmacy links,
+ * policies, results, and report overrides cascade with the client row;
+ * stored PDFs/reports are removed from object storage best-effort.
+ * PHI hygiene: once an analysis is delivered, only admin/manager may erase.
+ */
+export async function deleteClientAnalysis(
+  analysisId: string,
+): Promise<ActionResult<null>> {
+  try {
+    const profile = await requireRole();
+    uuidSchema.parse(analysisId);
+
+    const db = getDb();
+    const analysis = await db.query.analyses.findFirst({
+      where: eq(analyses.id, analysisId),
+      with: { client: true },
+    });
+    if (!analysis) return err("Analysis not found");
+    if (analysis.status === "delivered" && profile.role === "agent") {
+      return err("Delivered analyses can only be deleted by a manager or admin");
+    }
+
+    const storagePaths = [
+      analysis.client.sourceRxcPath,
+      analysis.reportPath,
+      analysis.reportPdfPath,
+    ].filter((p): p is string => p !== null);
+
+    await db.transaction(async (tx) => {
+      await writeAudit(tx, {
+        actorId: profile.id,
+        action: "client.deleted",
+        entityType: "client",
+        entityId: analysis.clientId,
+        meta: { clientName: analysis.client.fullName, analysisId, status: analysis.status },
+      });
+      await tx.delete(clients).where(eq(clients.id, analysis.clientId));
+    });
+    await Promise.all(storagePaths.map((path) => deleteObject(path)));
+
+    revalidatePath("/", "layout");
+    return ok(null);
   } catch (e) {
     return err(errorMessage(e));
   }
