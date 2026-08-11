@@ -205,6 +205,7 @@ const stagedCostPatchSchema = z
     copayCents: z.number().int().min(0).nullable(),
     coinsurancePct: z.number().min(0).max(100).nullable(),
     maxCents: z.number().int().min(0).nullable(),
+    daysSupply: z.number().int().min(1).max(365),
   })
   .refine(
     (p) =>
@@ -230,6 +231,7 @@ export async function updateStagedTierCost(
         copayCents: input.copayCents,
         coinsurancePct: input.coinsurancePct === null ? null : String(input.coinsurancePct),
         maxCents: input.maxCents,
+        daysSupply: input.daysSupply,
         sourceNote: "SoB import — hand-corrected in preview",
         verifiedBy: profile.id,
         verifiedAt: new Date(),

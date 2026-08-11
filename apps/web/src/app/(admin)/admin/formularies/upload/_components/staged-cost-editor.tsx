@@ -55,6 +55,7 @@ export function EditStagedCostDialog({
     cost.coinsurancePct === null ? "" : String(cost.coinsurancePct),
   );
   const [cap, setCap] = useState(centsToDollars(cost.maxCents));
+  const [days, setDays] = useState(String(cost.daysSupply));
   const [pending, startTransition] = useTransition();
 
   const save = () => {
@@ -74,11 +75,17 @@ export function EditStagedCostDialog({
       toast.error('Fill a copay, a coinsurance percentage, or only the cap ("up to $X")');
       return;
     }
+    const daysSupply = Number((days.match(/\d+/) ?? [])[0]);
+    if (!Number.isInteger(daysSupply) || daysSupply < 1 || daysSupply > 365) {
+      toast.error("Days supply is the fill length from the document — e.g. 30, 90, 100");
+      return;
+    }
     startTransition(async () => {
       const result = await updateStagedTierCost(cost.id, {
         copayCents,
         coinsurancePct,
         maxCents: capCents,
+        daysSupply,
       });
       if (!result.ok) {
         toast.error(result.error);
@@ -144,16 +151,29 @@ export function EditStagedCostDialog({
                 />
               </div>
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="staged-cap">Per-fill cap ($, optional)</Label>
-              <Input
-                id="staged-cap"
-                className="text-data"
-                inputMode="decimal"
-                placeholder='e.g. 35 for "25% up to $35"'
-                value={cap}
-                onChange={(e) => setCap(e.target.value)}
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="staged-cap">Per-fill cap ($, optional)</Label>
+                <Input
+                  id="staged-cap"
+                  className="text-data"
+                  inputMode="decimal"
+                  placeholder='e.g. 35 for "25% up to $35"'
+                  value={cap}
+                  onChange={(e) => setCap(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="staged-days">Days supply</Label>
+                <Input
+                  id="staged-days"
+                  className="text-data"
+                  inputMode="numeric"
+                  placeholder="e.g. 30, 90, 100"
+                  value={days}
+                  onChange={(e) => setDays(e.target.value)}
+                />
+              </div>
             </div>
             <p className="text-xs text-steel">
               Fill a copay OR a coinsurance — or the cap alone when the document says just

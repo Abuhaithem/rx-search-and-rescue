@@ -308,6 +308,7 @@ export async function loadComparisonInputs(analysisId: string): Promise<Comparis
     comparedPharmacies,
     orderedPlanIds,
     mailChannelByPlan,
+    mailLabel: mailOrderLabel(enginePlans, mailChannelByPlan),
     statusByPharmacyPlan,
     includeMailOrder: analysis.includeMailOrder,
   });
@@ -396,10 +397,27 @@ const channelLabel = (channel: PharmacyChannel | null): string =>
  * channel resolved per plan from network status), plus a mail row when opted
  * in. Pure — shared by the on-screen comparison and the report builder.
  */
+/** "Mail order (90-day)" when every plan's mail channel prices one supply length; plain "Mail order" when they differ. */
+export function mailOrderLabel(
+  planCosts: { id: string; tierCosts: { channel: PharmacyChannel; daysSupply: number }[] }[],
+  mailChannelByPlan: Map<string, PharmacyChannel | null>,
+): string {
+  const days = new Set(
+    planCosts.flatMap((plan) => {
+      const channel = mailChannelByPlan.get(plan.id);
+      return plan.tierCosts
+        .filter((tc) => tc.channel === channel)
+        .map((tc) => tc.daysSupply);
+    }),
+  );
+  return days.size === 1 ? `Mail order (${[...days][0]}-day)` : "Mail order";
+}
+
 export function resolvePricingScenarios(args: {
   comparedPharmacies: { id: string; name: string }[];
   orderedPlanIds: string[];
   mailChannelByPlan: Map<string, PharmacyChannel | null>;
+  mailLabel: string;
   statusByPharmacyPlan: Map<string, NetworkStatus>;
   includeMailOrder: boolean;
 }): ComparisonScenario[] {
@@ -428,10 +446,10 @@ export function resolvePricingScenarios(args: {
     }
     scenarios.push({
       key: "mail",
-      label: "Mail order (90-day)",
+      label: args.mailLabel,
       kind: "mail",
       pharmacyId: null,
-      scenario: { key: "mail", label: "Mail order (90-day)", kind: "mail", channelByPlan },
+      scenario: { key: "mail", label: args.mailLabel, kind: "mail", channelByPlan },
       assumedPlanIds: new Set(),
     });
   }

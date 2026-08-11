@@ -14,12 +14,53 @@ import type { PlanCatalogRow } from "@/server/queries/plans";
 import { centsToDollarInput, parseDollarsToCents } from "./money";
 import { TierChecklist } from "./tier-checklist";
 
-const CHANNELS = [
-  { channel: "preferred_retail", daysSupply: 30, label: "Preferred retail — 30 day" },
-  { channel: "standard_retail", daysSupply: 30, label: "Standard retail — 30 day" },
-  { channel: "preferred_mail", daysSupply: 90, label: "Preferred mail — 90 day" },
-  { channel: "standard_mail", daysSupply: 90, label: "Standard mail — 90 day" },
+const CHANNEL_ORDER = [
+  "preferred_retail",
+  "standard_retail",
+  "preferred_mail",
+  "standard_mail",
 ] as const;
+type Channel = (typeof CHANNEL_ORDER)[number];
+
+const CHANNEL_LABEL: Record<Channel, string> = {
+  preferred_retail: "Preferred retail",
+  standard_retail: "Standard retail",
+  preferred_mail: "Preferred mail",
+  standard_mail: "Standard mail",
+};
+
+interface GridRow {
+  channel: Channel;
+  daysSupply: number;
+}
+
+const rowKey = (row: GridRow) => `${row.channel}|${row.daysSupply}`;
+const rowLabel = (row: GridRow) => `${CHANNEL_LABEL[row.channel]} — ${row.daysSupply} day`;
+
+/** Documents vary: 30/90 is common but 60- and 100-day supplies exist too. */
+const DEFAULT_ROWS: GridRow[] = [
+  { channel: "preferred_retail", daysSupply: 30 },
+  { channel: "standard_retail", daysSupply: 30 },
+  { channel: "preferred_mail", daysSupply: 90 },
+  { channel: "standard_mail", daysSupply: 90 },
+];
+
+const sortRows = (rows: GridRow[]): GridRow[] =>
+  [...rows].sort((a, b) =>
+    a.channel === b.channel
+      ? a.daysSupply - b.daysSupply
+      : CHANNEL_ORDER.indexOf(a.channel) - CHANNEL_ORDER.indexOf(b.channel),
+  );
+
+/** Grid rows come from the pricing on file; the classic four seed empty plans. */
+function rowsFromCatalog(tierCosts: PlanCatalogRow["tierCosts"]): GridRow[] {
+  const seen = new Map<string, GridRow>();
+  for (const tc of tierCosts) {
+    const row = { channel: tc.channel as Channel, daysSupply: tc.daysSupply };
+    seen.set(rowKey(row), row);
+  }
+  return seen.size > 0 ? sortRows([...seen.values()]) : DEFAULT_ROWS;
+}
 
 const TIERS = [
   { tier: "t1", label: "T1" },
@@ -41,7 +82,7 @@ function gridFromCatalog(tierCosts: PlanCatalogRow["tierCosts"]): Record<string,
         : tc.coinsurancePct != null
           ? `${tc.coinsurancePct % 1 === 0 ? tc.coinsurancePct.toFixed(0) : tc.coinsurancePct}%`
           : "";
-    if (display) grid[`${tc.channel}|${tc.tier}`] = display;
+    if (display) grid[`${tc.channel}|${tc.daysSupply}|${tc.tier}`] = display;
   }
   return grid;
 }
@@ -75,6 +116,9 @@ export function PlanEditor({ row }: { row: PlanCatalogRow }) {
   const [grid, setGrid] = useState<Record<string, string>>(() =>
     gridFromCatalog(row.tierCosts),
   );
+  const [gridRows, setGridRows] = useState<GridRow[]>(() => rowsFromCatalog(row.tierCosts));
+  const [newChannel, setNewChannel] = useState<Channel>("preferred_retail");
+  const [newDays, setNewDays] = useState("");
   // Display labels only — tier identity stays t1..t6/insulin.
   const [tierLabels, setTierLabels] = useState<Record<string, string>>(() => ({
     ...plan.tierLabels,
@@ -90,21 +134,21 @@ export function PlanEditor({ row }: { row: PlanCatalogRow }) {
     }
 
     const tierCostRows: TierCostRowInput[] = [];
-    for (const channel of CHANNELS) {
+    for (const gridRow of gridRows) {
       for (const tier of TIERS) {
-        const raw = grid[`${channel.channel}|${tier.tier}`] ?? "";
+        const raw = grid[`${rowKey(gridRow)}|${tier.tier}`] ?? "";
         const parsed = parseCell(raw);
         if (parsed === "invalid") {
           toast.error(
-            `Can't read "${raw.trim()}" for ${channel.label}, ${tier.label} — use "$10", "$47.50", or "50%"`,
+            `Can't read "${raw.trim()}" for ${rowLabel(gridRow)}, ${tier.label} — use "$10", "$47.50", or "50%"`,
           );
           return;
         }
         if (parsed == null) continue;
         tierCostRows.push({
-          channel: channel.channel,
+          channel: gridRow.channel,
           tier: tier.tier,
-          daysSupply: channel.daysSupply,
+          daysSupply: gridRow.daysSupply,
           copayCents: parsed.copayCents,
           coinsurancePct: parsed.coinsurancePct,
         });
@@ -231,15 +275,15 @@ export function PlanEditor({ row }: { row: PlanCatalogRow }) {
                 </TRow>
               </THead>
               <TBody>
-                {CHANNELS.map((channel) => (
-                  <TRow key={channel.channel} className="hover:bg-transparent">
-                    <TCell className="whitespace-nowrap font-semibold">{channel.label}</TCell>
+                {gridRows.map((gridRow) => (
+                  <TRow key={rowKey(gridRow)} className="hover:bg-transparent">
+                    <TCell className="whitespace-nowrap font-semibold">{rowLabel(gridRow)}</TCell>
                     {TIERS.map((tier) => {
-                      const key = `${channel.channel}|${tier.tier}`;
+                      const key = `${rowKey(gridRow)}|${tier.tier}`;
                       return (
                         <TCell key={key} className="px-1.5 py-1.5">
                           <Input
-                            aria-label={`${channel.label}, ${tier.label}`}
+                            aria-label={`${rowLabel(gridRow)}, ${tier.label}`}
                             placeholder="—"
                             className="text-data h-8 w-16 px-2 text-[13px]"
                             value={grid[key] ?? ""}
@@ -255,10 +299,54 @@ export function PlanEditor({ row }: { row: PlanCatalogRow }) {
               </TBody>
             </Table>
           </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              aria-label="Channel for new pricing row"
+              className="h-8 rounded-md border border-mist bg-white px-2 text-sm"
+              value={newChannel}
+              onChange={(event) => setNewChannel(event.target.value as Channel)}
+            >
+              {CHANNEL_ORDER.map((channel) => (
+                <option key={channel} value={channel}>
+                  {CHANNEL_LABEL[channel]}
+                </option>
+              ))}
+            </select>
+            <Input
+              aria-label="Days supply for new pricing row"
+              inputMode="numeric"
+              placeholder="days, e.g. 60"
+              className="text-data h-8 w-28"
+              value={newDays}
+              onChange={(event) => setNewDays(event.target.value)}
+            />
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                const days = Number((newDays.match(/\d+/) ?? [])[0]);
+                if (!Number.isInteger(days) || days < 1 || days > 365) {
+                  toast.error("Days supply is the fill length — e.g. 30, 60, 90, 100");
+                  return;
+                }
+                const candidate: GridRow = { channel: newChannel, daysSupply: days };
+                if (gridRows.some((r) => rowKey(r) === rowKey(candidate))) {
+                  toast.error(`${rowLabel(candidate)} is already in the grid`);
+                  return;
+                }
+                setGridRows((previous) => sortRows([...previous, candidate]));
+                setNewDays("");
+              }}
+            >
+              Add pricing row
+            </Button>
+          </div>
           <p className="text-xs text-steel">
             Enter &quot;$10&quot;, &quot;$47.50&quot;, or &quot;50%&quot; per cell — leave a cell
-            blank for no pricing row. Typed by a person on purpose: these are the dollar figures
-            clients see.
+            blank for no pricing row. Supplies aren&apos;t fixed to 30/90 days — add a row for
+            whatever fill length the Summary of Benefits prices (60-day, 100-day…). Typed by a
+            person on purpose: these are the dollar figures clients see.
           </p>
           {row.tierCostCount > 0 ? (
             <p className="text-xs text-steel">

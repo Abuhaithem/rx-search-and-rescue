@@ -27,7 +27,7 @@ import {
   type ReportGridRow,
   type ReportModel,
 } from "@rxsr/core/report-model";
-import { resolvePricingScenarios } from "../queries/comparison";
+import { mailOrderLabel, resolvePricingScenarios } from "../queries/comparison";
 import {
   buildDeductibleFootnote,
   buildPlanBenefits,
@@ -213,11 +213,16 @@ export async function buildReportModel(analysisId: string): Promise<ReportModel 
     needsConfirmation: r.needsConfirmation,
   }));
 
+  const mailChannelByPlan = new Map(
+    orderedPlanIds.map((id) => [id, mailChannelForPlan(tierCostsByPlan.get(id) ?? [])]),
+  );
   const scenarios = resolvePricingScenarios({
     comparedPharmacies: comparedPharmacies.map((p) => ({ id: p.id, name: p.name })),
     orderedPlanIds,
-    mailChannelByPlan: new Map(
-      orderedPlanIds.map((id) => [id, mailChannelForPlan(tierCostsByPlan.get(id) ?? [])]),
+    mailChannelByPlan,
+    mailLabel: mailOrderLabel(
+      orderedPlanIds.map((id) => ({ id, tierCosts: tierCostsByPlan.get(id) ?? [] })),
+      mailChannelByPlan,
     ),
     statusByPharmacyPlan,
     includeMailOrder: analysis.includeMailOrder,
