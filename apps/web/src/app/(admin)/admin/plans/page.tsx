@@ -9,7 +9,6 @@ import { cn } from "@/lib/utils";
 import { getPlanCatalog } from "@/server/queries/plans";
 import { getLatestCmsImport } from "../_lib/cms-import";
 import { RefreshPoller } from "../formularies/_components/refresh-poller";
-import { ImportCmsDialog } from "./_components/import-cms-dialog";
 import { PlanEditor } from "./_components/plan-editor";
 
 interface PageProps {
@@ -32,7 +31,8 @@ export default async function PlanCatalogPage({ searchParams }: PageProps) {
         title={`Plan Catalog — ${year}`}
         actions={
           <div className="flex items-center gap-2">
-            <ImportCmsDialog defaultYear={year} />
+            {/* CMS import UI removed per admin flow decision — the importCmsData
+                action and worker job remain if it ever comes back. */}
             <Button asChild>
               <Link href={`/admin/formularies/upload?year=${year}`}>Add drug plan →</Link>
             </Button>
