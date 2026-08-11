@@ -94,7 +94,23 @@ export async function runSobIngest(
           });
         }
       }
-      if (inserts.length > 0) await db.insert(planTierCosts).values(inserts);
+      // The extractor can map two document columns onto one canonical
+      // channel (e.g. both mail columns → preferred_mail when amounts tie).
+      // The unique index (plan, channel, tier, supply) would reject the
+      // batch — dedupe first-wins and surface the count instead of failing.
+      const seenKeys = new Set<string>();
+      const deduped = inserts.filter((row) => {
+        const key = `${row.channel}:${row.tier}:${row.daysSupply}`;
+        if (seenKeys.has(key)) return false;
+        seenKeys.add(key);
+        return true;
+      });
+      if (deduped.length < inserts.length) {
+        warnings.push(
+          `${plan.name}: ${inserts.length - deduped.length} duplicate channel/tier cells dropped`,
+        );
+      }
+      if (deduped.length > 0) await db.insert(planTierCosts).values(deduped);
 
       await db
         .update(plans)

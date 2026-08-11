@@ -452,7 +452,8 @@ Per plan extract:
   - channel mapping: a single retail column covering ALL in-network retail → standard_retail. Separate preferred/standard retail columns map respectively. Mail-order columns map to preferred_mail/standard_mail ("standard mail" vs a named preferred mail pharmacy).
   - daysSupply from the column header (30-day, 90-day, 100-day).
   - "$6" → copayCents 600. "25%" → coinsurancePct 25. "25% up to $35" → coinsurancePct 25 AND maxCents 3500. "N/A" or "not covered" → covered false with null amounts.
-Copy numbers exactly as printed — never estimate, never fill gaps by analogy with other tiers.`,
+Copy numbers exactly as printed — never estimate, never fill gaps by analogy with other tiers.
+Emit each channel + daysSupply combination AT MOST ONCE per tier. When a document has both standard and preferred mail-order columns, they are DIFFERENT channels (standard_mail and preferred_mail) even when their amounts are identical.`,
   jsonSchema: SOB_JSON_SCHEMA,
   parse: (input) => sobExtractionSchema.parse(input),
 };
