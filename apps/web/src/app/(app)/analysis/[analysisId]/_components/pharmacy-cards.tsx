@@ -12,7 +12,8 @@ import { toast } from "@/components/ui/sonner";
 import { cn } from "@/lib/utils";
 
 const MAX_PHARMACIES = 6;
-const FILTER_THRESHOLD = 9;
+/** Unselected cards shown before "Show all" — selected ones always render. */
+const COLLAPSED_LIMIT = 9;
 
 /**
  * Pharmacy selection as cards — the same grammar as plan selection: the whole
@@ -30,18 +31,34 @@ export function PharmacyCards({
   const router = useRouter();
   const [selected, setSelected] = useState<string[]>(choices.selectedIds);
   const [filter, setFilter] = useState("");
+  const [showAll, setShowAll] = useState(false);
   const [pending, startTransition] = useTransition();
 
-  const visible = useMemo(() => {
+  // Selected cards pin first and always render; the rest collapse behind
+  // "Show all" unless a filter is active (searching means browsing).
+  const { visible, hiddenCount } = useMemo(() => {
     const q = filter.trim().toLowerCase();
-    if (q === "") return choices.options;
-    return choices.options.filter(
-      (o) =>
-        o.name.toLowerCase().includes(q) ||
-        (o.city ?? "").toLowerCase().includes(q) ||
-        (o.zip ?? "").includes(q),
-    );
-  }, [choices.options, filter]);
+    const matches =
+      q === ""
+        ? choices.options
+        : choices.options.filter(
+            (o) =>
+              o.name.toLowerCase().includes(q) ||
+              (o.city ?? "").toLowerCase().includes(q) ||
+              (o.zip ?? "").includes(q),
+          );
+    const ordered = [
+      ...matches.filter((o) => selected.includes(o.id)),
+      ...matches.filter((o) => !selected.includes(o.id)),
+    ];
+    if (q !== "" || showAll) return { visible: ordered, hiddenCount: 0 };
+    const selectedCount = ordered.filter((o) => selected.includes(o.id)).length;
+    const limit = Math.max(selectedCount + COLLAPSED_LIMIT, COLLAPSED_LIMIT);
+    return {
+      visible: ordered.slice(0, limit),
+      hiddenCount: Math.max(0, ordered.length - limit),
+    };
+  }, [choices.options, filter, selected, showAll]);
 
   const toggle = (pharmacyId: string) => {
     if (choices.locked) return;
@@ -76,13 +93,13 @@ export function PharmacyCards({
             pharmacy&apos;s standing on every compared plan.
           </p>
         </div>
-        {choices.options.length > FILTER_THRESHOLD ? (
+        {choices.options.length > COLLAPSED_LIMIT ? (
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-steel" />
             <Input
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
-              placeholder="Filter by name, city, ZIP…"
+              placeholder={`Search all ${choices.options.length} pharmacies…`}
               className="w-64 pl-8"
             />
           </div>
@@ -151,6 +168,27 @@ export function PharmacyCards({
           })}
         </div>
       )}
+      {hiddenCount > 0 ? (
+        <div className="flex justify-center">
+          <button
+            type="button"
+            onClick={() => setShowAll(true)}
+            className="rounded-md px-4 py-2 text-sm font-semibold text-harbor hover:bg-mist/40"
+          >
+            Show all {choices.options.length.toLocaleString()} pharmacies ↓
+          </button>
+        </div>
+      ) : showAll && filter.trim() === "" && choices.options.length > COLLAPSED_LIMIT ? (
+        <div className="flex justify-center">
+          <button
+            type="button"
+            onClick={() => setShowAll(false)}
+            className="rounded-md px-4 py-2 text-sm font-semibold text-steel hover:bg-mist/40"
+          >
+            Show fewer ↑
+          </button>
+        </div>
+      ) : null}
       {choices.locked ? (
         <p className="text-xs text-steel">
           Pharmacy selection is locked — this analysis is approved.
