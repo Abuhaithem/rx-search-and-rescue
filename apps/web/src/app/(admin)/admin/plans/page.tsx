@@ -8,15 +8,13 @@ import { cn } from "@/lib/utils";
 import { getPlanCatalog } from "@/server/queries/plans";
 import { listCarriers } from "../_lib/carriers";
 import { getLatestCmsImport } from "../_lib/cms-import";
-import { searchPharmaciesByZip } from "../_lib/pharmacies";
 import { RefreshPoller } from "../formularies/_components/refresh-poller";
 import { AddPlanDialog } from "./_components/add-plan-dialog";
 import { ImportCmsDialog } from "./_components/import-cms-dialog";
-import { PharmacyNetworkSection } from "./_components/pharmacy-network-section";
 import { PlanEditor } from "./_components/plan-editor";
 
 interface PageProps {
-  searchParams: Promise<{ year?: string; plan?: string; pzip?: string }>;
+  searchParams: Promise<{ year?: string; plan?: string }>;
 }
 
 export default async function PlanCatalogPage({ searchParams }: PageProps) {
@@ -29,9 +27,6 @@ export default async function PlanCatalogPage({ searchParams }: PageProps) {
     getLatestCmsImport(),
   ]);
   const selected = catalog.find((row) => row.plan.id === params.plan) ?? catalog[0] ?? null;
-  const zip = /^\d{5}$/.test(params.pzip ?? "") ? params.pzip! : null;
-  const pharmacyResults =
-    selected && zip ? await searchPharmaciesByZip(zip, selected.plan.id) : [];
 
   return (
     <div className="space-y-8">
@@ -97,20 +92,9 @@ export default async function PlanCatalogPage({ searchParams }: PageProps) {
             </CardContent>
           </Card>
 
-          {/* Right pane: the selected plan's money numbers + pharmacy network. */}
-          {selected ? (
-            <div className="space-y-6">
-              <PlanEditor key={selected.plan.id} row={selected} />
-              <PharmacyNetworkSection
-                key={`network-${selected.plan.id}`}
-                planId={selected.plan.id}
-                year={year}
-                directoryAttached={selected.plan.pharmacyDirectoryPath != null}
-                zip={zip}
-                results={pharmacyResults}
-              />
-            </div>
-          ) : null}
+          {/* Right pane: the selected plan's money numbers. The pharmacy
+              network lives on the carrier (Carriers screen) — one per carrier. */}
+          {selected ? <PlanEditor key={selected.plan.id} row={selected} /> : null}
         </div>
       )}
     </div>

@@ -5,10 +5,10 @@ import { revalidatePath } from "next/cache";
 import { and, count, eq, inArray, ne } from "drizzle-orm";
 import { z } from "zod";
 import {
+  carrierPharmacyNetworks,
   formularies,
   formularyEntries,
   getDb,
-  planPharmacyNetworks,
   plans,
   planTierCosts,
 } from "@rxsr/db";
@@ -200,7 +200,7 @@ export async function uploadSummaryOfBenefits(
   }
 }
 
-/** Step 5 — formData: pdf. Network rows land staged for every wizard plan. */
+/** Step 5 — formData: pdf. The network is the CARRIER's; rows land staged. */
 export async function uploadWizardDirectory(
   formularyId: string,
   formData: FormData,
@@ -211,18 +211,13 @@ export async function uploadWizardDirectory(
     const file = requirePdf(formData);
 
     const db = getDb();
-    const wizardPlans = await db
-      .select({ id: plans.id })
-      .from(plans)
-      .where(eq(plans.formularyId, formularyId));
-    if (wizardPlans.length === 0) return err("Approve the formulary preview first");
+    const formulary = await db.query.formularies.findFirst({
+      where: eq(formularies.id, formularyId),
+    });
+    if (!formulary) return err("Formulary not found");
 
-    const storagePath = `pharmacy-directories/wizard-${formularyId}.pdf`;
+    const storagePath = `pharmacy-directories/carrier-${formulary.carrierId}.pdf`;
     await uploadObject(storagePath, new Uint8Array(await file.arrayBuffer()), "application/pdf");
-    await db
-      .update(plans)
-      .set({ pharmacyDirectoryPath: storagePath })
-      .where(eq(plans.formularyId, formularyId));
 
     const { ingestionJobId } = await enqueueIngestionJob({
       kind: "pharmacy_directory",
@@ -230,7 +225,7 @@ export async function uploadWizardDirectory(
       targetId: formularyId,
       payload: (jobId) => ({
         ingestionJobId: jobId,
-        planIds: wizardPlans.map((p) => p.id),
+        carrierId: formulary.carrierId,
         storagePath,
         staged: true,
       }),
@@ -327,12 +322,12 @@ export async function finalizeFormularyWizard(
       }
 
       await tx
-        .update(planPharmacyNetworks)
+        .update(carrierPharmacyNetworks)
         .set({ staged: false, verifiedBy: profile.id, verifiedAt: new Date() })
         .where(
           and(
-            inArray(planPharmacyNetworks.planId, planIds),
-            eq(planPharmacyNetworks.staged, true),
+            eq(carrierPharmacyNetworks.carrierId, formulary.carrierId),
+            eq(carrierPharmacyNetworks.staged, true),
           ),
         );
 

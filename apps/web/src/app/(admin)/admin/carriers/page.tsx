@@ -8,14 +8,16 @@ import { PageHeader } from "@/components/domain/page-header";
 import { CarrierLogo } from "@/components/domain/carrier-logo";
 import { formatUsd } from "@/components/domain/format";
 import { cn } from "@/lib/utils";
+import { searchPharmaciesByZip } from "../_lib/pharmacies";
 import { CarrierDialog } from "./_components/carrier-dialog";
+import { CarrierNetworkSection } from "./_components/carrier-network-section";
 import { WorkbookDialog } from "./_components/workbook-dialog";
 import { YearSwitcher } from "./_components/year-switcher";
 
 export const dynamic = "force-dynamic";
 
 interface CarriersPageProps {
-  searchParams: Promise<{ year?: string; carrier?: string }>;
+  searchParams: Promise<{ year?: string; carrier?: string; zip?: string }>;
 }
 
 export default async function CarriersPage({ searchParams }: CarriersPageProps) {
@@ -28,6 +30,9 @@ export default async function CarriersPage({ searchParams }: CarriersPageProps) 
   ]);
   const selected =
     catalog.find((c) => c.id === params.carrier) ?? catalog[0] ?? null;
+  const zip = /^\d{5}$/.test(params.zip ?? "") ? params.zip! : null;
+  const pharmacyResults =
+    selected && zip ? await searchPharmaciesByZip(zip, selected.id) : [];
 
   return (
     <div className="space-y-6">
@@ -218,7 +223,7 @@ export default async function CarriersPage({ searchParams }: CarriersPageProps) 
                         <li key={plan.id} className="flex items-center justify-between gap-3 py-2.5">
                           <span className="min-w-0">
                             <Link
-                              href={`/admin/plans?year=${year}&plan=${plan.id}`}
+                              href={`/admin/carriers/${selected.id}/plans/${plan.id}?year=${year}`}
                               className="block truncate text-sm font-medium text-deepwater hover:underline"
                             >
                               {plan.name}
@@ -241,16 +246,12 @@ export default async function CarriersPage({ searchParams }: CarriersPageProps) 
                             >
                               {plan.tierCostsComplete ? "Costs ✓" : "Costs missing"}
                             </span>
-                            <span
-                              className={cn(
-                                "rounded-chip px-2 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-[0.1em]",
-                                plan.pharmacyDirectoryAttached
-                                  ? "bg-covered-soft text-covered"
-                                  : "bg-fog text-steel",
-                              )}
+                            <Link
+                              href={`/admin/carriers/${selected.id}/plans/${plan.id}?year=${year}`}
+                              className="rounded-chip bg-fog px-2 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-[0.1em] text-harbor hover:bg-mist/60"
                             >
-                              {plan.pharmacyDirectoryAttached ? "Directory ✓" : "No directory"}
-                            </span>
+                              Open →
+                            </Link>
                           </span>
                         </li>
                       ))}
@@ -259,9 +260,19 @@ export default async function CarriersPage({ searchParams }: CarriersPageProps) 
                 </CardContent>
               </Card>
 
+              <CarrierNetworkSection
+                key={`network-${selected.id}`}
+                carrierId={selected.id}
+                year={year}
+                networkCount={selected.networkCount}
+                zip={zip}
+                results={pharmacyResults}
+              />
+
               <p className="text-xs text-steel">
-                Load order per carrier: formulary PDF → plans → Summary of Benefits tier costs →
-                pharmacy directory. Agents only see plans once costs are complete.
+                Load order per carrier: formulary PDF → plans (each with its Summary of Benefits)
+                → ONE pharmacy directory for the whole carrier. Agents only see plans once costs
+                are complete.
               </p>
             </div>
           ) : null}

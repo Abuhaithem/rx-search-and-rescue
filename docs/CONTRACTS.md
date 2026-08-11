@@ -42,8 +42,8 @@ admin.ts (role: admin|manager)
 - `resolveReviewRow(entryId, decision)` — pick reading A/B or manual row
 - `activateFormulary(formularyId)` — gate: zero unresolved review rows
 - `upsertPlan(payload)` / `upsertTierCosts(planId, rows)` / `setServiceAreas(planId, areas)`
-- `attachPharmacyDirectory(planId, formData)` — enqueue pharmacy-directory job
-- `setPlanPharmacyStatus(planId, pharmacyId, status)` — agent-source override
+- `attachCarrierDirectory(carrierId, formData)` — enqueue the carrier-network directory job
+- `setCarrierPharmacyStatus(carrierId, pharmacyId, status)` — agent-source override on the carrier network
 
 auth.ts
 - `signIn(email, password)` / `signOut()`

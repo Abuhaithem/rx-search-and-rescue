@@ -311,7 +311,7 @@ export default async function FormularyWizardPage({ searchParams }: WizardPagePr
               <p className="text-xs text-steel">
                 {runningJob
                   ? runningJob.message
-                  : "The directory's pharmacies land as a staged preview — nothing is live yet. Chain-level statuses can also come from the carrier workbook on the Carriers screen."}
+                  : "One directory for the whole carrier: every plan shares this network. Rows land as a staged preview — nothing is live yet."}
               </p>
               <Button asChild variant="secondary">
                 <Link href={stepHref(6)}>Preview network →</Link>
@@ -359,8 +359,8 @@ export default async function FormularyWizardPage({ searchParams }: WizardPagePr
                 </TBody>
               </Table>
               <p className="border-t border-mist/55 px-4 py-2 text-xs text-steel">
-                {state.stagedNetwork.total.toLocaleString()} staged network links across{" "}
-                {state.plans.length} plans.
+                {state.stagedNetwork.total.toLocaleString()} staged pharmacies on the carrier
+                network — shared by all {state.plans.length} plans.
               </p>
             </CardContent>
           </Card>

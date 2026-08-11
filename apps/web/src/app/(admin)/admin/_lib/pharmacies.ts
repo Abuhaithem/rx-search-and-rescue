@@ -1,10 +1,9 @@
 /**
- * Server-only route helper. No pharmacies query exists under src/server/queries,
- * so the plan-catalog override affordance searches the pharmacies reference
- * table directly (plus the plan's network row + verifier name). Read-only.
- * Never import from client code.
+ * Server-only route helper for the carrier network manager: pharmacies by
+ * ZIP plus each one's status on the CARRIER's network (+ verifier name).
+ * Read-only. Never import from client code.
  */
-import { and, asc, eq, getDb, inArray, pharmacies, planPharmacyNetworks, profiles } from "@rxsr/db";
+import { and, asc, carrierPharmacyNetworks, eq, getDb, inArray, pharmacies, profiles } from "@rxsr/db";
 import type { NetworkStatus } from "@rxsr/core";
 
 export interface PharmacyZipRow {
@@ -17,7 +16,7 @@ export interface PharmacyZipRow {
   verifiedByName: string | null;
 }
 
-export async function searchPharmaciesByZip(zip: string, planId: string): Promise<PharmacyZipRow[]> {
+export async function searchPharmaciesByZip(zip: string, carrierId: string): Promise<PharmacyZipRow[]> {
   const db = getDb();
   const rows = await db
     .select({
@@ -35,18 +34,18 @@ export async function searchPharmaciesByZip(zip: string, planId: string): Promis
 
   const networkRows = await db
     .select({
-      pharmacyId: planPharmacyNetworks.pharmacyId,
-      status: planPharmacyNetworks.status,
+      pharmacyId: carrierPharmacyNetworks.pharmacyId,
+      status: carrierPharmacyNetworks.status,
       verifiedByName: profiles.fullName,
     })
-    .from(planPharmacyNetworks)
-    .leftJoin(profiles, eq(planPharmacyNetworks.verifiedBy, profiles.id))
+    .from(carrierPharmacyNetworks)
+    .leftJoin(profiles, eq(carrierPharmacyNetworks.verifiedBy, profiles.id))
     .where(
       and(
-        eq(planPharmacyNetworks.planId, planId),
-        eq(planPharmacyNetworks.staged, false),
+        eq(carrierPharmacyNetworks.carrierId, carrierId),
+        eq(carrierPharmacyNetworks.staged, false),
         inArray(
-          planPharmacyNetworks.pharmacyId,
+          carrierPharmacyNetworks.pharmacyId,
           rows.map((r) => r.id),
         ),
       ),

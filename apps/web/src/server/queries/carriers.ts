@@ -1,5 +1,5 @@
-import { desc } from "drizzle-orm";
-import { formularies, getDb, plans } from "@rxsr/db";
+import { count, desc, eq } from "drizzle-orm";
+import { carrierPharmacyNetworks, formularies, getDb, plans } from "@rxsr/db";
 import { createSignedDownloadUrl } from "../storage";
 import { isTierCostsComplete } from "./plans";
 
@@ -12,7 +12,6 @@ export interface CarrierPlanSummary {
   premiumCents: number | null;
   curated: boolean;
   tierCostsComplete: boolean;
-  pharmacyDirectoryAttached: boolean;
   serviceAreaCount: number;
 }
 
@@ -30,6 +29,8 @@ export interface CarrierCatalogRow {
   slug: string;
   /** Presigned GET URL for the logo (1 h); null when no logo uploaded. */
   logoUrl: string | null;
+  /** Live (unstaged) pharmacies on this carrier's network. */
+  networkCount: number;
   plans: CarrierPlanSummary[];
   formularies: CarrierFormularySummary[];
 }
@@ -40,7 +41,15 @@ export interface CarrierCatalogRow {
  * screen needs to show.
  */
 export async function getCarrierCatalog(planYear: number): Promise<CarrierCatalogRow[]> {
-  const rows = await getDb().query.carriers.findMany({
+  const db = getDb();
+  const networkCounts = await db
+    .select({ carrierId: carrierPharmacyNetworks.carrierId, value: count() })
+    .from(carrierPharmacyNetworks)
+    .where(eq(carrierPharmacyNetworks.staged, false))
+    .groupBy(carrierPharmacyNetworks.carrierId);
+  const networkByCarrier = new Map(networkCounts.map((r) => [r.carrierId, r.value]));
+
+  const rows = await db.query.carriers.findMany({
     orderBy: (c, { asc: ascOp }) => [ascOp(c.name)],
     with: {
       plans: {
@@ -69,6 +78,7 @@ export async function getCarrierCatalog(planYear: number): Promise<CarrierCatalo
       logoUrl: carrier.logoPath
         ? await createSignedDownloadUrl(carrier.logoPath).catch(() => null)
         : null,
+      networkCount: networkByCarrier.get(carrier.id) ?? 0,
       plans: carrier.plans.map((plan) => ({
         id: plan.id,
         name: plan.name,
@@ -76,7 +86,6 @@ export async function getCarrierCatalog(planYear: number): Promise<CarrierCatalo
         premiumCents: plan.premiumCents,
         curated: plan.curated,
         tierCostsComplete: isTierCostsComplete(plan.tierCosts),
-        pharmacyDirectoryAttached: plan.pharmacyDirectoryPath !== null,
         serviceAreaCount: plan.serviceAreas.length,
       })),
       formularies: carrier.formularies.map((formulary) => ({

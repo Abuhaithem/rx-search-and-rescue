@@ -8,6 +8,7 @@
 import { and, eq, inArray } from "drizzle-orm";
 import {
   analyses,
+  carrierPharmacyNetworks,
   clientMedications,
   clients,
   formularyEntries,
@@ -165,11 +166,35 @@ export async function loadComparisonInputs(analysisId: string): Promise<Comparis
 
   const planIds = analysisPlanRows.map((ap) => ap.planId);
 
-  // One query for every compared pharmacy × plan network status.
+  // Effective network status per pharmacy × plan: the CARRIER's network is
+  // the default; plan-level rows (agent overrides, CMS per-plan data) win.
   const statusByPharmacyPlan = new Map<string, NetworkStatus>();
   const pharmacyIds = comparedPharmacies.map((p) => p.id);
   if (pharmacyIds.length > 0 && planIds.length > 0) {
-    const networkRows = await db
+    const carrierIds = [...new Set(analysisPlanRows.map((ap) => ap.plan.carrierId))];
+    const carrierRows = await db
+      .select({
+        carrierId: carrierPharmacyNetworks.carrierId,
+        pharmacyId: carrierPharmacyNetworks.pharmacyId,
+        status: carrierPharmacyNetworks.status,
+      })
+      .from(carrierPharmacyNetworks)
+      .where(
+        and(
+          eq(carrierPharmacyNetworks.staged, false),
+          inArray(carrierPharmacyNetworks.pharmacyId, pharmacyIds),
+          inArray(carrierPharmacyNetworks.carrierId, carrierIds),
+        ),
+      );
+    const byCarrier = new Map(carrierRows.map((r) => [`${r.carrierId}:${r.pharmacyId}`, r.status]));
+    for (const ap of analysisPlanRows) {
+      for (const pharmacyId of pharmacyIds) {
+        const status = byCarrier.get(`${ap.plan.carrierId}:${pharmacyId}`);
+        if (status) statusByPharmacyPlan.set(`${pharmacyId}:${ap.planId}`, status);
+      }
+    }
+
+    const overrideRows = await db
       .select({
         pharmacyId: planPharmacyNetworks.pharmacyId,
         planId: planPharmacyNetworks.planId,
@@ -183,7 +208,7 @@ export async function loadComparisonInputs(analysisId: string): Promise<Comparis
           inArray(planPharmacyNetworks.planId, planIds),
         ),
       );
-    for (const row of networkRows) {
+    for (const row of overrideRows) {
       statusByPharmacyPlan.set(`${row.pharmacyId}:${row.planId}`, row.status);
     }
   }

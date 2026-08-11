@@ -131,6 +131,33 @@ export const carriers = pgTable("carriers", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/**
+ * THE pharmacy network: one per carrier, shared by all of its plans (present
+ * and future). Effective status for a plan = plan_pharmacy_networks exception
+ * if present, else this row. Directory/workbook/wizard uploads write here;
+ * per-plan rows exist only for genuine exceptions (agent overrides, CMS
+ * per-plan data).
+ */
+export const carrierPharmacyNetworks = pgTable(
+  "carrier_pharmacy_networks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    carrierId: uuid("carrier_id")
+      .notNull()
+      .references(() => carriers.id, { onDelete: "cascade" }),
+    pharmacyId: uuid("pharmacy_id")
+      .notNull()
+      .references(() => pharmacies.id, { onDelete: "cascade" }),
+    status: networkStatus("status").notNull(),
+    source: networkSource("source").notNull(),
+    /** Upload-wizard staging: invisible to every analysis query until Finalize. */
+    staged: boolean("staged").notNull().default(false),
+    verifiedBy: uuid("verified_by").references(() => profiles.id),
+    verifiedAt: timestamp("verified_at", { withTimezone: true }),
+  },
+  (t) => [uniqueIndex("carrier_pharmacy_networks_uq").on(t.carrierId, t.pharmacyId)],
+);
+
 /** One row per formulary DOCUMENT edition. Many plans may share one formulary. */
 export const formularies = pgTable(
   "formularies",

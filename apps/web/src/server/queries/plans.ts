@@ -1,5 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
 import {
+  carrierPharmacyNetworks,
   clients,
   getDb,
   inForcePolicies,
@@ -84,7 +85,30 @@ export async function getAvailablePlans(clientId: string, planYear: number): Pro
     client.pharmacies.find((p) => p.confirmed && p.pharmacyId)?.pharmacyId ?? null;
   const statusByPlan = new Map<string, NetworkStatus>();
   if (rankOnePharmacyId && inArea.length > 0) {
-    const networkRows = await db
+    // Carrier network is the default; plan-level rows are exceptions and win.
+    const carrierRows = await db
+      .select({
+        carrierId: carrierPharmacyNetworks.carrierId,
+        status: carrierPharmacyNetworks.status,
+      })
+      .from(carrierPharmacyNetworks)
+      .where(
+        and(
+          eq(carrierPharmacyNetworks.pharmacyId, rankOnePharmacyId),
+          eq(carrierPharmacyNetworks.staged, false),
+          inArray(
+            carrierPharmacyNetworks.carrierId,
+            [...new Set(inArea.map((p) => p.carrierId))],
+          ),
+        ),
+      );
+    const byCarrier = new Map(carrierRows.map((r) => [r.carrierId, r.status]));
+    for (const plan of inArea) {
+      const status = byCarrier.get(plan.carrierId);
+      if (status) statusByPlan.set(plan.id, status);
+    }
+
+    const overrideRows = await db
       .select({ planId: planPharmacyNetworks.planId, status: planPharmacyNetworks.status })
       .from(planPharmacyNetworks)
       .where(
@@ -97,7 +121,7 @@ export async function getAvailablePlans(clientId: string, planYear: number): Pro
           ),
         ),
       );
-    for (const row of networkRows) statusByPlan.set(row.planId, row.status);
+    for (const row of overrideRows) statusByPlan.set(row.planId, row.status);
   }
 
   const currentPlanId =

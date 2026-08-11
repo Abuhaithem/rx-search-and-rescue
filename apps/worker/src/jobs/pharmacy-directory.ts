@@ -1,11 +1,12 @@
 /**
  * Plan pharmacy directory ingest: text-layer extraction (directories are
  * text-heavy tables), Claude row extraction per page chunk, deterministic
- * matching against the pharmacies table, and plan_pharmacy_networks upserts
- * with source "directory". Directory rows with no DB match CREATE the
+ * matching against the pharmacies table, and carrier_pharmacy_networks
+ * upserts with source "directory" — the network belongs to the CARRIER and
+ * covers all of its plans. Directory rows with no DB match CREATE the
  * pharmacies row — carrier files are the source of pharmacy truth.
  */
-import { and, eq, pharmacies, planPharmacyNetworks, sql } from "@rxsr/db";
+import { and, carrierPharmacyNetworks, eq, pharmacies, sql } from "@rxsr/db";
 import { matchPharmacy, type ParsedPharmacyText } from "@rxsr/core/pharmacy";
 import type { PharmacyDirectoryJob } from "../queues";
 import { markJobDone, markJobFailed, markJobRunning, updateJobProgress } from "../lib/db";
@@ -101,23 +102,21 @@ export async function runPharmacyDirectory(
             pharmacyId = inserted.id;
           }
         }
-        for (const planId of job.planIds) {
-          await db
-            .insert(planPharmacyNetworks)
-            .values({
-              planId,
-              pharmacyId,
-              status,
-              source: "directory",
-              staged: job.staged ?? false,
-            })
-            .onConflictDoUpdate({
-              target: [planPharmacyNetworks.planId, planPharmacyNetworks.pharmacyId],
-              set: { status, source: "directory", staged: job.staged ?? false },
-              // Agent-set rows outrank every automated source (same rule as CMS import).
-              setWhere: sql`${planPharmacyNetworks.source} <> 'agent'`,
-            });
-        }
+        await db
+          .insert(carrierPharmacyNetworks)
+          .values({
+            carrierId: job.carrierId,
+            pharmacyId,
+            status,
+            source: "directory",
+            staged: job.staged ?? false,
+          })
+          .onConflictDoUpdate({
+            target: [carrierPharmacyNetworks.carrierId, carrierPharmacyNetworks.pharmacyId],
+            set: { status, source: "directory", staged: job.staged ?? false },
+            // Agent-set rows outrank every automated source.
+            setWhere: sql`${carrierPharmacyNetworks.source} <> 'agent'`,
+          });
         linked += 1;
       }
     }

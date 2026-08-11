@@ -4,11 +4,11 @@ import { revalidatePath } from "next/cache";
 import { and, count, eq, ne } from "drizzle-orm";
 import { z } from "zod";
 import {
+  carrierPharmacyNetworks,
   carriers,
   formularies,
   formularyEntries,
   getDb,
-  planPharmacyNetworks,
   planServiceAreas,
   planTierCosts,
   plans,
@@ -202,6 +202,138 @@ export async function uploadFormulary(
 
     revalidatePath("/", "layout");
     return ok({ formularyId: formularyRow.id });
+  } catch (e) {
+    return err(errorMessage(e));
+  }
+}
+
+const entryPatchSchema = z.object({
+  rawDrugName: z.string().trim().min(1).max(300).optional(),
+  tier: z.number().int().min(1).max(6).optional(),
+  rawRequirementsText: z.string().trim().max(500).nullable().optional(),
+});
+export type FormularyEntryPatch = z.infer<typeof entryPatchSchema>;
+
+/** Direct edit from the plan workspace; clears the review flag. */
+export async function updateFormularyEntry(
+  entryId: string,
+  patch: FormularyEntryPatch,
+): Promise<ActionResult<{ entryId: string }>> {
+  try {
+    const profile = await requireRole("admin", "manager");
+    uuidSchema.parse(entryId);
+    const input = entryPatchSchema.parse(patch);
+    if (Object.keys(input).length === 0) return err("Nothing to change");
+
+    const db = getDb();
+    const [updated] = await db
+      .update(formularyEntries)
+      .set({
+        ...(input.rawDrugName !== undefined
+          ? { rawDrugName: input.rawDrugName, normalizedName: input.rawDrugName.toLowerCase() }
+          : {}),
+        ...(input.tier !== undefined ? { tier: input.tier } : {}),
+        ...(input.rawRequirementsText !== undefined
+          ? { rawRequirementsText: input.rawRequirementsText }
+          : {}),
+        needsReview: false,
+        reviewedBy: profile.id,
+      })
+      .where(eq(formularyEntries.id, entryId))
+      .returning({ id: formularyEntries.id, formularyId: formularyEntries.formularyId });
+    if (!updated) return err("Entry not found");
+
+    await writeAudit(db, {
+      actorId: profile.id,
+      action: "formulary.entry_edited",
+      entityType: "formulary_entry",
+      entityId: entryId,
+      meta: { formularyId: updated.formularyId, patch: input },
+    });
+
+    revalidatePath("/", "layout");
+    return ok({ entryId });
+  } catch (e) {
+    return err(errorMessage(e));
+  }
+}
+
+export async function deleteFormularyEntry(
+  entryId: string,
+): Promise<ActionResult<{ entryId: string }>> {
+  try {
+    const profile = await requireRole("admin", "manager");
+    uuidSchema.parse(entryId);
+
+    const db = getDb();
+    const [removed] = await db
+      .delete(formularyEntries)
+      .where(eq(formularyEntries.id, entryId))
+      .returning({ id: formularyEntries.id, formularyId: formularyEntries.formularyId });
+    if (!removed) return err("Entry not found");
+
+    await writeAudit(db, {
+      actorId: profile.id,
+      action: "formulary.entry_deleted",
+      entityType: "formulary_entry",
+      entityId: entryId,
+      meta: { formularyId: removed.formularyId },
+    });
+
+    revalidatePath("/", "layout");
+    return ok({ entryId });
+  } catch (e) {
+    return err(errorMessage(e));
+  }
+}
+
+const entryAddSchema = z.object({
+  rawDrugName: z.string().trim().min(1).max(300),
+  tier: z.number().int().min(1).max(6),
+  rawRequirementsText: z.string().trim().max(500).nullable(),
+});
+
+/** Manual drug row (e.g. a drug the extractor missed). */
+export async function addFormularyEntry(
+  formularyId: string,
+  row: z.infer<typeof entryAddSchema>,
+): Promise<ActionResult<{ entryId: string }>> {
+  try {
+    const profile = await requireRole("admin", "manager");
+    uuidSchema.parse(formularyId);
+    const input = entryAddSchema.parse(row);
+
+    const db = getDb();
+    const formulary = await db.query.formularies.findFirst({
+      where: eq(formularies.id, formularyId),
+    });
+    if (!formulary) return err("Formulary not found");
+
+    const [inserted] = await db
+      .insert(formularyEntries)
+      .values({
+        formularyId,
+        rawDrugName: input.rawDrugName,
+        normalizedName: input.rawDrugName.toLowerCase(),
+        tier: input.tier,
+        rawRequirementsText: input.rawRequirementsText,
+        sourcePage: 0, // manual rows have no source page
+        needsReview: false,
+        reviewedBy: profile.id,
+      })
+      .returning({ id: formularyEntries.id });
+    if (!inserted) return err("Failed to add entry");
+
+    await writeAudit(db, {
+      actorId: profile.id,
+      action: "formulary.entry_added",
+      entityType: "formulary_entry",
+      entityId: inserted.id,
+      meta: { formularyId, rawDrugName: input.rawDrugName, tier: input.tier },
+    });
+
+    revalidatePath("/", "layout");
+    return ok({ entryId: inserted.id });
   } catch (e) {
     return err(errorMessage(e));
   }
@@ -468,45 +600,40 @@ export async function setServiceAreas(
   }
 }
 
-/** formData: pdf. */
-export async function attachPharmacyDirectory(
-  planId: string,
+/** formData: pdf. The directory feeds the CARRIER's single network. */
+export async function attachCarrierDirectory(
+  carrierId: string,
   formData: FormData,
-): Promise<ActionResult<{ planId: string; ingestionJobId: string }>> {
+): Promise<ActionResult<{ carrierId: string; ingestionJobId: string }>> {
   try {
     const profile = await requireRole("admin", "manager");
-    uuidSchema.parse(planId);
+    uuidSchema.parse(carrierId);
     const file = requirePdf(formData);
 
     const db = getDb();
-    const plan = await db.query.plans.findFirst({ where: eq(plans.id, planId) });
-    if (!plan) return err("Plan not found");
+    const [carrier] = await db.select().from(carriers).where(eq(carriers.id, carrierId));
+    if (!carrier) return err("Carrier not found");
 
-    const storagePath = `pharmacy-directories/${planId}.pdf`;
+    const storagePath = `pharmacy-directories/carrier-${carrierId}.pdf`;
     await uploadObject(storagePath, new Uint8Array(await file.arrayBuffer()), "application/pdf");
-
-    await db
-      .update(plans)
-      .set({ pharmacyDirectoryPath: storagePath })
-      .where(eq(plans.id, planId));
 
     const { ingestionJobId } = await enqueueIngestionJob({
       kind: "pharmacy_directory",
       queue: QUEUE_NAMES.pharmacyDirectory,
-      targetId: planId,
-      payload: (jobId) => ({ ingestionJobId: jobId, planIds: [planId], storagePath }),
+      targetId: carrierId,
+      payload: (jobId) => ({ ingestionJobId: jobId, carrierId, storagePath }),
     });
 
     await writeAudit(db, {
       actorId: profile.id,
-      action: "plan.pharmacy_directory_attached",
-      entityType: "plan",
-      entityId: planId,
+      action: "carrier.pharmacy_directory_attached",
+      entityType: "carrier",
+      entityId: carrierId,
       meta: { storagePath, ingestionJobId },
     });
 
     revalidatePath("/", "layout");
-    return ok({ planId, ingestionJobId });
+    return ok({ carrierId, ingestionJobId });
   } catch (e) {
     return err(errorMessage(e));
   }
@@ -687,22 +814,23 @@ export async function importCmsData(
   }
 }
 
-export async function setPlanPharmacyStatus(
-  planId: string,
+/** Agent-verified status on the carrier's network — outranks every import. */
+export async function setCarrierPharmacyStatus(
+  carrierId: string,
   pharmacyId: string,
   status: NetworkStatus,
-): Promise<ActionResult<{ planId: string; pharmacyId: string }>> {
+): Promise<ActionResult<{ carrierId: string; pharmacyId: string }>> {
   try {
     const profile = await requireRole("admin", "manager");
     const input = z
-      .object({ planId: uuidSchema, pharmacyId: uuidSchema, status: networkStatusSchema })
-      .parse({ planId, pharmacyId, status });
+      .object({ carrierId: uuidSchema, pharmacyId: uuidSchema, status: networkStatusSchema })
+      .parse({ carrierId, pharmacyId, status });
 
     const db = getDb();
     await db
-      .insert(planPharmacyNetworks)
+      .insert(carrierPharmacyNetworks)
       .values({
-        planId: input.planId,
+        carrierId: input.carrierId,
         pharmacyId: input.pharmacyId,
         status: input.status,
         source: "agent",
@@ -710,20 +838,20 @@ export async function setPlanPharmacyStatus(
         verifiedAt: new Date(),
       })
       .onConflictDoUpdate({
-        target: [planPharmacyNetworks.planId, planPharmacyNetworks.pharmacyId],
+        target: [carrierPharmacyNetworks.carrierId, carrierPharmacyNetworks.pharmacyId],
         set: { status: input.status, source: "agent", verifiedBy: profile.id, verifiedAt: new Date() },
       });
 
     await writeAudit(db, {
       actorId: profile.id,
-      action: "plan.pharmacy_status_set",
-      entityType: "plan",
-      entityId: input.planId,
+      action: "carrier.pharmacy_status_set",
+      entityType: "carrier",
+      entityId: input.carrierId,
       meta: { pharmacyId: input.pharmacyId, status: input.status },
     });
 
     revalidatePath("/", "layout");
-    return ok({ planId: input.planId, pharmacyId: input.pharmacyId });
+    return ok({ carrierId: input.carrierId, pharmacyId: input.pharmacyId });
   } catch (e) {
     return err(errorMessage(e));
   }

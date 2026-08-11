@@ -2,16 +2,16 @@
  * Carrier workbook import (.xlsx): deterministic ingestion of the agency's
  * "Part D Drug Price Lookup" template. Tier Pricing by Plan → plan_tier_costs
  * (+ tier display labels + Rx deductible when the plan has none yet);
- * Pharmacy Network chain rules → plan_pharmacy_networks over existing
- * pharmacies rows. No LLM anywhere. Precedence mirrors the CMS import:
+ * Pharmacy Network chain rules → the carrier's single network
+ * (carrier_pharmacy_networks) over existing pharmacies rows. No LLM anywhere. Precedence mirrors the CMS import:
  * existing tier costs are never overwritten, agent network rows always win.
  */
 import {
   and,
+  carrierPharmacyNetworks,
   eq,
   ilike,
   pharmacies,
-  planPharmacyNetworks,
   plans,
   planTierCosts,
   sql,
@@ -135,7 +135,6 @@ export async function runXlsxImport(
     await updateJobProgress(db, job.ingestionJobId, {
       message: `Applying ${parsed.networkRules.length} pharmacy network rules`,
     });
-    const networkPlanIds = matchedPlanIds.length > 0 ? matchedPlanIds : carrierPlans.map((p) => p.id);
     const claimed = new Set<string>();
     let networkLinks = 0;
     for (const rule of parsed.networkRules) {
@@ -166,17 +165,20 @@ export async function runXlsxImport(
             .set({ altNames: [...pharmacy.altNames, ...aliases] })
             .where(eq(pharmacies.id, pharmacy.id));
         }
-        for (const planId of networkPlanIds) {
-          await db
-            .insert(planPharmacyNetworks)
-            .values({ planId, pharmacyId: pharmacy.id, status: rule.status, source: "xlsx" })
-            .onConflictDoUpdate({
-              target: [planPharmacyNetworks.planId, planPharmacyNetworks.pharmacyId],
-              set: { status: rule.status, source: "xlsx" },
-              setWhere: sql`${planPharmacyNetworks.source} <> 'agent'`,
-            });
-          networkLinks += 1;
-        }
+        await db
+          .insert(carrierPharmacyNetworks)
+          .values({
+            carrierId: job.carrierId,
+            pharmacyId: pharmacy.id,
+            status: rule.status,
+            source: "xlsx",
+          })
+          .onConflictDoUpdate({
+            target: [carrierPharmacyNetworks.carrierId, carrierPharmacyNetworks.pharmacyId],
+            set: { status: rule.status, source: "xlsx" },
+            setWhere: sql`${carrierPharmacyNetworks.source} <> 'agent'`,
+          });
+        networkLinks += 1;
       }
     }
 

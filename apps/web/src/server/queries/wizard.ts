@@ -1,13 +1,12 @@
 import { and, count, desc, eq, inArray, sql } from "drizzle-orm";
 import {
+  carrierPharmacyNetworks,
   formularies,
   formularyEntries,
   getDb,
   ingestionJobs,
   pharmacies,
-  planPharmacyNetworks,
   plans,
-  planTierCosts,
 } from "@rxsr/db";
 import type { NetworkStatus, PharmacyChannel } from "@rxsr/core";
 
@@ -125,46 +124,42 @@ export async function getWizardState(formularyId: string): Promise<WizardState |
       .limit(10),
   ]);
 
-  const planIds = wizardPlans.map((p) => p.id);
   let stagedTotal = 0;
   const byStatus: Record<NetworkStatus, number> = {
     preferred: 0,
     standard: 0,
     out_of_network: 0,
   };
-  let sample: WizardNetworkPreviewRow[] = [];
-  if (planIds.length > 0) {
-    const statusRows = await db
-      .select({ status: planPharmacyNetworks.status, count: count() })
-      .from(planPharmacyNetworks)
-      .where(
-        and(
-          inArray(planPharmacyNetworks.planId, planIds),
-          eq(planPharmacyNetworks.staged, true),
-        ),
-      )
-      .groupBy(planPharmacyNetworks.status);
-    for (const row of statusRows) {
-      byStatus[row.status] = row.count;
-      stagedTotal += row.count;
-    }
-    sample = await db
-      .selectDistinct({
-        pharmacyName: pharmacies.name,
-        city: pharmacies.city,
-        status: planPharmacyNetworks.status,
-      })
-      .from(planPharmacyNetworks)
-      .innerJoin(pharmacies, eq(pharmacies.id, planPharmacyNetworks.pharmacyId))
-      .where(
-        and(
-          inArray(planPharmacyNetworks.planId, planIds),
-          eq(planPharmacyNetworks.staged, true),
-        ),
-      )
-      .orderBy(pharmacies.name)
-      .limit(15);
+  const statusRows = await db
+    .select({ status: carrierPharmacyNetworks.status, count: count() })
+    .from(carrierPharmacyNetworks)
+    .where(
+      and(
+        eq(carrierPharmacyNetworks.carrierId, formulary.carrierId),
+        eq(carrierPharmacyNetworks.staged, true),
+      ),
+    )
+    .groupBy(carrierPharmacyNetworks.status);
+  for (const row of statusRows) {
+    byStatus[row.status] = row.count;
+    stagedTotal += row.count;
   }
+  const sample: WizardNetworkPreviewRow[] = await db
+    .selectDistinct({
+      pharmacyName: pharmacies.name,
+      city: pharmacies.city,
+      status: carrierPharmacyNetworks.status,
+    })
+    .from(carrierPharmacyNetworks)
+    .innerJoin(pharmacies, eq(pharmacies.id, carrierPharmacyNetworks.pharmacyId))
+    .where(
+      and(
+        eq(carrierPharmacyNetworks.carrierId, formulary.carrierId),
+        eq(carrierPharmacyNetworks.staged, true),
+      ),
+    )
+    .orderBy(pharmacies.name)
+    .limit(15);
 
   return {
     formulary: {
