@@ -69,6 +69,8 @@ export interface WizardState {
     byStatus: Record<NetworkStatus, number>;
     sample: WizardNetworkPreviewRow[];
   };
+  /** Already-live carrier network rows for this year — step 5 offers a skip. */
+  liveNetworkCount: number;
   jobs: WizardJobStatus[];
 }
 
@@ -123,6 +125,17 @@ export async function getWizardState(formularyId: string): Promise<WizardState |
       .orderBy(desc(ingestionJobs.createdAt))
       .limit(10),
   ]);
+
+  const [liveCount] = await db
+    .select({ value: count() })
+    .from(carrierPharmacyNetworks)
+    .where(
+      and(
+        eq(carrierPharmacyNetworks.carrierId, formulary.carrierId),
+        eq(carrierPharmacyNetworks.planYear, formulary.planYear),
+        eq(carrierPharmacyNetworks.staged, false),
+      ),
+    );
 
   let stagedTotal = 0;
   const byStatus: Record<NetworkStatus, number> = {
@@ -191,6 +204,7 @@ export async function getWizardState(formularyId: string): Promise<WizardState |
       })),
     })),
     stagedNetwork: { total: stagedTotal, byStatus, sample },
+    liveNetworkCount: liveCount?.value ?? 0,
     jobs,
   };
 }

@@ -309,6 +309,16 @@ export default async function FormularyWizardPage({ searchParams }: WizardPagePr
       {step === 5 ? (
         <Card>
           <CardContent className="space-y-4 p-6">
+            {state.liveNetworkCount > 0 ? (
+              <p className="rounded-card bg-covered-soft px-4 py-3 text-sm text-covered">
+                <span className="font-semibold">
+                  {state.liveNetworkCount.toLocaleString()} pharmacies already on file
+                </span>{" "}
+                for {formulary.carrierName} · {formulary.planYear} — the network is shared by
+                every plan of this carrier, so you can skip ahead. Upload only to replace or
+                extend it.
+              </p>
+            ) : null}
             <DirectoryUploadForm formularyId={formulary.id} />
             <div className="flex items-center justify-between border-t border-mist/55 pt-4">
               <p className="text-xs text-steel">
@@ -317,7 +327,11 @@ export default async function FormularyWizardPage({ searchParams }: WizardPagePr
                   : "One directory for the whole carrier: every plan shares this network. Rows land as a staged preview — nothing is live yet."}
               </p>
               <Button asChild variant="secondary">
-                <Link href={stepHref(6)}>Preview network →</Link>
+                <Link href={stepHref(6)}>
+                  {state.liveNetworkCount > 0 && !runningJob
+                    ? "Skip — network already loaded →"
+                    : "Preview network →"}
+                </Link>
               </Button>
             </div>
           </CardContent>
