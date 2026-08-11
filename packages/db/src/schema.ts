@@ -315,7 +315,12 @@ export const planTierCosts = pgTable(
     verifiedBy: uuid("verified_by").references(() => profiles.id),
     verifiedAt: timestamp("verified_at", { withTimezone: true }),
   },
-  (t) => [uniqueIndex("plan_tier_costs_uq").on(t.planId, t.channel, t.tier, t.daysSupply)],
+  // staged is part of identity: a staged shadow copy of a cell must be able
+  // to coexist with the live one (preview-before-commit re-runs after a
+  // finalize). Finalize deletes the live set before flipping staged rows.
+  (t) => [
+    uniqueIndex("plan_tier_costs_uq").on(t.planId, t.channel, t.tier, t.daysSupply, t.staged),
+  ],
 );
 
 // ─── ZIP → county ────────────────────────────────────────────────────────────
