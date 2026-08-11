@@ -92,9 +92,11 @@ export default async function CarriersPage({ searchParams }: CarriersPageProps) 
                               isSelected ? "text-white/70" : "text-steel",
                             )}
                           >
-                            {carrier.plans.length} plan{carrier.plans.length === 1 ? "" : "s"} ·{" "}
-                            {carrier.formularies.length} formular
-                            {carrier.formularies.length === 1 ? "y" : "ies"}
+                            {carrier.plans.length} drug plan
+                            {carrier.plans.length === 1 ? "" : "s"}
+                            {carrier.networkCount > 0
+                              ? ` · ${carrier.networkCount.toLocaleString()} pharmacies`
+                              : ""}
                           </span>
                         </span>
                         {attention ? (
@@ -147,72 +149,7 @@ export default async function CarriersPage({ searchParams }: CarriersPageProps) 
               <Card>
                 <CardContent className="space-y-3 p-5">
                   <div className="flex items-center justify-between">
-                    <p className="text-eyebrow">Formularies — {year}</p>
-                    <Link
-                      href={`/admin/formularies/upload?year=${year}`}
-                      className="text-sm font-semibold text-harbor hover:underline"
-                    >
-                      {selected.formularies.length === 0 ? "Load formulary →" : "Load another →"}
-                    </Link>
-                  </div>
-                  {selected.formularies.length === 0 ? (
-                    <p className="text-sm text-steel">
-                      <span className="font-semibold text-deepwater">Step 1:</span> upload this
-                      carrier&apos;s formulary PDF. Plans can share one document — upload it once.
-                    </p>
-                  ) : (
-                    <ul className="divide-y divide-mist/55">
-                      {selected.formularies.map((formulary) => (
-                        <li key={formulary.id} className="flex items-center justify-between gap-3 py-2.5">
-                          {formulary.status === "active" ? (
-                            <span className="min-w-0 truncate text-sm font-medium text-deepwater">
-                              {formulary.label}
-                            </span>
-                          ) : (
-                            <Link
-                              href={`/admin/formularies/upload?formulary=${formulary.id}&step=2`}
-                              className="min-w-0 truncate text-sm font-medium text-deepwater hover:underline"
-                            >
-                              {formulary.label} — resume setup →
-                            </Link>
-                          )}
-                          <span className="flex shrink-0 items-center gap-2">
-                            {formulary.needsReview > 0 ? (
-                              <span className="rounded-chip bg-restricted-soft px-2 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-[0.1em] text-restricted">
-                                {formulary.needsReview} to review
-                              </span>
-                            ) : null}
-                            <span
-                              className={cn(
-                                "rounded-chip px-2 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-[0.1em]",
-                                formulary.status === "active"
-                                  ? "bg-covered-soft text-covered"
-                                  : formulary.status === "superseded"
-                                    ? "bg-fog text-steel"
-                                    : "bg-restricted-soft text-restricted",
-                              )}
-                            >
-                              {formulary.status === "qa"
-                                ? "QA"
-                                : formulary.status === "ingesting"
-                                  ? "Reading"
-                                  : formulary.status}
-                            </span>
-                            <span className="text-data text-xs text-steel">
-                              {formulary.totalEntries.toLocaleString()} entries
-                            </span>
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="space-y-3 p-5">
-                  <div className="flex items-center justify-between">
-                    <p className="text-eyebrow">Plans — {year}</p>
+                    <p className="text-eyebrow">Drug plans — {year}</p>
                     <Link
                       href={`/admin/formularies/upload?year=${year}`}
                       className="text-sm font-semibold text-harbor hover:underline"
@@ -220,52 +157,115 @@ export default async function CarriersPage({ searchParams }: CarriersPageProps) 
                       Add drug plan →
                     </Link>
                   </div>
-                  {selected.plans.length === 0 ? (
-                    <p className="text-sm text-steel">
-                      No drug plans yet. A plan is created from its two documents — upload the
-                      formulary list and its Summary of Benefits, and the plan lands here priced
-                      and ready to review.
-                    </p>
-                  ) : (
-                    <ul className="divide-y divide-mist/55">
-                      {selected.plans.map((plan) => (
-                        <li key={plan.id} className="flex items-center justify-between gap-3 py-2.5">
-                          <span className="min-w-0">
+
+                  {(() => {
+                    const formularyById = new Map(selected.formularies.map((f) => [f.id, f]));
+                    const linkedIds = new Set(
+                      selected.plans.map((p) => p.formularyId).filter(Boolean),
+                    );
+                    // Uploads mid-wizard (or active but plan-less) surface as
+                    // resumable setups; finished ones are represented by their plans.
+                    const inSetup = selected.formularies.filter(
+                      (f) =>
+                        f.status !== "superseded" &&
+                        (f.status !== "active" || !linkedIds.has(f.id)),
+                    );
+
+                    if (selected.plans.length === 0 && inSetup.length === 0) {
+                      return (
+                        <p className="text-sm text-steel">
+                          No drug plans yet. A plan is created from its two documents — upload
+                          the formulary list and its Summary of Benefits, and the plan lands
+                          here priced and ready to review.
+                        </p>
+                      );
+                    }
+
+                    return (
+                      <ul className="divide-y divide-mist/55">
+                        {inSetup.map((formulary) => (
+                          <li
+                            key={formulary.id}
+                            className="flex items-center justify-between gap-3 py-2.5"
+                          >
                             <Link
-                              href={`/admin/carriers/${selected.id}/plans/${plan.id}?year=${year}`}
-                              className="block truncate text-sm font-medium text-deepwater hover:underline"
+                              href={`/admin/formularies/upload?formulary=${formulary.id}&step=2`}
+                              className="min-w-0 truncate text-sm font-medium text-deepwater hover:underline"
                             >
-                              {plan.name}
+                              {formulary.label} — resume setup →
                             </Link>
-                            <span className="text-data text-xs text-steel">
-                              {plan.contractPlanId ?? "—"}
-                              {plan.premiumCents !== null
-                                ? ` · ${formatUsd(plan.premiumCents)}/mo`
-                                : ""}
+                            <span className="flex shrink-0 items-center gap-2">
+                              {formulary.needsReview > 0 ? (
+                                <span className="rounded-chip bg-restricted-soft px-2 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-[0.1em] text-restricted">
+                                  {formulary.needsReview} to review
+                                </span>
+                              ) : null}
+                              <span className="rounded-chip bg-restricted-soft px-2 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-[0.1em] text-restricted">
+                                {formulary.status === "ingesting" ? "Reading" : "Setup"}
+                              </span>
+                              <span className="text-data text-xs text-steel">
+                                {formulary.totalEntries.toLocaleString()} drugs
+                              </span>
                             </span>
-                          </span>
-                          <span className="flex shrink-0 items-center gap-2">
-                            <span
-                              className={cn(
-                                "rounded-chip px-2 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-[0.1em]",
-                                plan.tierCostsComplete
-                                  ? "bg-covered-soft text-covered"
-                                  : "bg-restricted-soft text-restricted",
-                              )}
+                          </li>
+                        ))}
+
+                        {selected.plans.map((plan) => {
+                          const formulary = plan.formularyId
+                            ? formularyById.get(plan.formularyId)
+                            : undefined;
+                          return (
+                            <li
+                              key={plan.id}
+                              className="flex items-center justify-between gap-3 py-2.5"
                             >
-                              {plan.tierCostsComplete ? "Costs ✓" : "Costs missing"}
-                            </span>
-                            <Link
-                              href={`/admin/carriers/${selected.id}/plans/${plan.id}?year=${year}`}
-                              className="rounded-chip bg-fog px-2 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-[0.1em] text-harbor hover:bg-mist/60"
-                            >
-                              Open →
-                            </Link>
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+                              <span className="min-w-0">
+                                <Link
+                                  href={`/admin/carriers/${selected.id}/plans/${plan.id}?year=${year}`}
+                                  className="block truncate text-sm font-medium text-deepwater hover:underline"
+                                >
+                                  {plan.name}
+                                </Link>
+                                <span className="text-data text-xs text-steel">
+                                  {plan.contractPlanId ?? "—"}
+                                  {plan.premiumCents !== null
+                                    ? ` · ${formatUsd(plan.premiumCents)}/mo`
+                                    : ""}
+                                </span>
+                              </span>
+                              <span className="flex shrink-0 items-center gap-2">
+                                {formulary ? (
+                                  <span className="rounded-chip bg-covered-soft px-2 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-[0.1em] text-covered">
+                                    {formulary.totalEntries.toLocaleString()} drugs
+                                  </span>
+                                ) : (
+                                  <span className="rounded-chip bg-restricted-soft px-2 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-[0.1em] text-restricted">
+                                    No drug list
+                                  </span>
+                                )}
+                                <span
+                                  className={cn(
+                                    "rounded-chip px-2 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-[0.1em]",
+                                    plan.tierCostsComplete
+                                      ? "bg-covered-soft text-covered"
+                                      : "bg-restricted-soft text-restricted",
+                                  )}
+                                >
+                                  {plan.tierCostsComplete ? "Costs ✓" : "Costs missing"}
+                                </span>
+                                <Link
+                                  href={`/admin/carriers/${selected.id}/plans/${plan.id}?year=${year}`}
+                                  className="rounded-chip bg-fog px-2 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-[0.1em] text-harbor hover:bg-mist/60"
+                                >
+                                  Open →
+                                </Link>
+                              </span>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    );
+                  })()}
                 </CardContent>
               </Card>
 
@@ -279,9 +279,9 @@ export default async function CarriersPage({ searchParams }: CarriersPageProps) 
               />
 
               <p className="text-xs text-steel">
-                Load order per carrier: formulary PDF → plans (each with its Summary of Benefits)
-                → ONE pharmacy directory for the whole carrier. Agents only see plans once costs
-                are complete.
+                A drug plan is its formulary list + Summary of Benefits; the pharmacy network
+                is uploaded once per carrier and shared by all its plans. Agents only see plans
+                once costs are complete.
               </p>
             </div>
           ) : null}

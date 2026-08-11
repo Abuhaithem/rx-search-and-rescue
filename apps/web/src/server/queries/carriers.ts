@@ -8,6 +8,7 @@ export type FormularyStatus = (typeof formularies.$inferSelect)["status"];
 export interface CarrierPlanSummary {
   id: string;
   name: string;
+  formularyId: string | null;
   contractPlanId: string | null;
   premiumCents: number | null;
   curated: boolean;
@@ -87,6 +88,7 @@ export async function getCarrierCatalog(planYear: number): Promise<CarrierCatalo
       plans: carrier.plans.map((plan) => ({
         id: plan.id,
         name: plan.name,
+        formularyId: plan.formularyId,
         contractPlanId: plan.contractPlanId,
         premiumCents: plan.premiumCents,
         curated: plan.curated,
