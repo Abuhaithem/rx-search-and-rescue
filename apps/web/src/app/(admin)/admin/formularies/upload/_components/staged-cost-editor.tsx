@@ -20,20 +20,24 @@ import type { WizardStagedTierCost } from "@/server/queries/wizard";
 const centsToDollars = (cents: number | null): string =>
   cents === null ? "" : (cents / 100).toFixed(2).replace(/\.00$/, "");
 
-/** Tolerant of "$35", "1,200", "35 " — empty string means "not set". */
+/**
+ * People type what the document says: "up to 35", "$35", "1,200.50".
+ * Extract the number from whatever surrounds it; empty = "not set".
+ */
 const dollarsToCents = (value: string): number | null | "invalid" => {
-  const cleaned = value.replace(/[$,\s]/g, "");
-  if (cleaned === "") return null;
-  const parsed = Number(cleaned);
-  return Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed * 100) : "invalid";
+  if (value.trim() === "") return null;
+  const match = value.replace(/,/g, "").match(/\d+(?:\.\d+)?/);
+  if (!match) return "invalid";
+  return Math.round(Number(match[0]) * 100);
 };
 
-/** Tolerant of "25%", "25 %". */
+/** "25", "25%", "about 25 %" → 25. */
 const parsePercent = (value: string): number | null | "invalid" => {
-  const cleaned = value.replace(/[%\s]/g, "");
-  if (cleaned === "") return null;
-  const parsed = Number(cleaned);
-  return Number.isFinite(parsed) && parsed >= 0 && parsed <= 100 ? parsed : "invalid";
+  if (value.trim() === "") return null;
+  const match = value.match(/\d+(?:\.\d+)?/);
+  if (!match) return "invalid";
+  const parsed = Number(match[0]);
+  return parsed >= 0 && parsed <= 100 ? parsed : "invalid";
 };
 
 /** In-place correction on the SoB preview — the preview IS the editor. */
