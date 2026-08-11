@@ -27,8 +27,9 @@ interface ReportEditorProps {
   clientId: string;
   model: ReportModel;
   status: AnalysisStatus;
-  /** The .docx→PDF conversion job has finished for the current approval. */
-  pdfReady: boolean;
+  /** State of the .docx→PDF conversion for the current approval. */
+  pdfState: "ready" | "working" | "failed";
+  pdfError: string | null;
 }
 
 const CHECKLIST = [
@@ -53,9 +54,16 @@ function StatusBadge({ status }: { status: AnalysisStatus }) {
   );
 }
 
-export function ReportEditor({ analysisId, clientId, model, status, pdfReady }: ReportEditorProps) {
+export function ReportEditor({ analysisId, clientId, model, status, pdfState, pdfError }: ReportEditorProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+
+  // The conversion runs in the worker; refresh until the PDF link appears.
+  useEffect(() => {
+    if (pdfState !== "working" || !(status === "approved" || status === "delivered")) return;
+    const timer = setInterval(() => router.refresh(), 4000);
+    return () => clearInterval(timer);
+  }, [pdfState, status, router]);
 
   const [agentNotes, setAgentNotes] = useState(model.agentNotes);
   const [notesState, setNotesState] = useState<"idle" | "saving" | "saved">("idle");
@@ -463,7 +471,7 @@ export function ReportEditor({ analysisId, clientId, model, status, pdfReady }: 
                     <Download className="size-4" />
                     Word document
                   </a>
-                  {pdfReady ? (
+                  {pdfState === "ready" ? (
                     <a
                       href={`/analysis/${analysisId}/report/download?format=pdf`}
                       className="inline-flex items-center gap-2 text-sm font-semibold text-deepwater underline-offset-2 hover:underline"
@@ -471,6 +479,13 @@ export function ReportEditor({ analysisId, clientId, model, status, pdfReady }: 
                       <Download className="size-4" />
                       PDF
                     </a>
+                  ) : pdfState === "failed" ? (
+                    <span
+                      className="inline-flex items-center gap-2 text-sm font-semibold text-notcovered"
+                      title={pdfError ?? undefined}
+                    >
+                      PDF conversion failed — re-approve to retry
+                    </span>
                   ) : (
                     <span className="inline-flex items-center gap-2 text-sm text-steel">
                       <Download className="size-4" />
