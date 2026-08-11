@@ -20,11 +20,20 @@ import type { WizardStagedTierCost } from "@/server/queries/wizard";
 const centsToDollars = (cents: number | null): string =>
   cents === null ? "" : (cents / 100).toFixed(2).replace(/\.00$/, "");
 
-const dollarsToCents = (value: string): number | null => {
-  const trimmed = value.trim();
-  if (trimmed === "") return null;
-  const parsed = Number(trimmed);
-  return Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed * 100) : null;
+/** Tolerant of "$35", "1,200", "35 " — empty string means "not set". */
+const dollarsToCents = (value: string): number | null | "invalid" => {
+  const cleaned = value.replace(/[$,\s]/g, "");
+  if (cleaned === "") return null;
+  const parsed = Number(cleaned);
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed * 100) : "invalid";
+};
+
+/** Tolerant of "25%", "25 %". */
+const parsePercent = (value: string): number | null | "invalid" => {
+  const cleaned = value.replace(/[%\s]/g, "");
+  if (cleaned === "") return null;
+  const parsed = Number(cleaned);
+  return Number.isFinite(parsed) && parsed >= 0 && parsed <= 100 ? parsed : "invalid";
 };
 
 /** In-place correction on the SoB preview — the preview IS the editor. */
@@ -46,8 +55,16 @@ export function EditStagedCostDialog({
 
   const save = () => {
     const copayCents = dollarsToCents(copay);
-    const coinsurancePct = coinsurance.trim() === "" ? null : Number(coinsurance);
+    const coinsurancePct = parsePercent(coinsurance);
     const capCents = dollarsToCents(cap);
+    if (copayCents === "invalid" || capCents === "invalid") {
+      toast.error("Enter dollar amounts as plain numbers, e.g. 35 or 35.50");
+      return;
+    }
+    if (coinsurancePct === "invalid") {
+      toast.error("Enter the coinsurance as a number between 0 and 100, e.g. 25");
+      return;
+    }
     const capOnly = copayCents === null && coinsurancePct === null && capCents !== null;
     if (!capOnly && (copayCents !== null) === (coinsurancePct !== null)) {
       toast.error('Fill a copay, a coinsurance percentage, or only the cap ("up to $X")');
