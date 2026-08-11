@@ -6,14 +6,12 @@ import { getWizardState, type WizardStagedTierCost } from "@/server/queries/wiza
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TBody, TCell, TH, THead, TRow } from "@/components/ui/table";
-import { NetworkStatusChip } from "@/components/domain/network-status-chip";
 import { PageHeader } from "@/components/domain/page-header";
 import { RestrictionChip } from "@/components/domain/restriction-chip";
 import { formatUsd } from "@/components/domain/format";
 import { RefreshPoller } from "../_components/refresh-poller";
 import { ReviewTable } from "../_components/review-table";
 import {
-  DirectoryUploadForm,
   FinalizeButton,
   PlanNamesApprove,
   SobUploadForm,
@@ -75,7 +73,7 @@ export default async function FormularyWizardPage({ searchParams }: WizardPagePr
 
   const state = await getWizardState(params.formulary);
   if (!state) notFound();
-  const step = Math.min(Math.max(Number(params.step) || 2, 2), 7);
+  const step = Math.min(Math.max(Number(params.step) || 2, 2), 5);
   const reviewRows =
     step === 2 && state.needsReviewCount > 0
       ? await getFormularyReviewRows(params.formulary)
@@ -300,96 +298,13 @@ export default async function FormularyWizardPage({ searchParams }: WizardPagePr
           ))}
           <div className="flex justify-end">
             <Button asChild>
-              <Link href={stepHref(5)}>Looks right — continue to pharmacy network →</Link>
+              <Link href={stepHref(5)}>Looks right — continue to finalize →</Link>
             </Button>
           </div>
         </div>
       ) : null}
 
       {step === 5 ? (
-        <Card>
-          <CardContent className="space-y-4 p-6">
-            {state.liveNetworkCount > 0 ? (
-              <p className="rounded-card bg-covered-soft px-4 py-3 text-sm text-covered">
-                <span className="font-semibold">
-                  {state.liveNetworkCount.toLocaleString()} pharmacies already on file
-                </span>{" "}
-                for {formulary.carrierName} · {formulary.planYear} — the network is shared by
-                every plan of this carrier, so you can skip ahead. Upload only to replace or
-                extend it.
-              </p>
-            ) : null}
-            <DirectoryUploadForm formularyId={formulary.id} />
-            <div className="flex items-center justify-between border-t border-mist/55 pt-4">
-              <p className="text-xs text-steel">
-                {runningJob
-                  ? runningJob.message
-                  : "One directory for the whole carrier: every plan shares this network. Rows land as a staged preview — nothing is live yet."}
-              </p>
-              <Button asChild variant="secondary">
-                <Link href={stepHref(6)}>
-                  {state.liveNetworkCount > 0 && !runningJob
-                    ? "Skip — network already loaded →"
-                    : "Preview network →"}
-                </Link>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      ) : null}
-
-      {step === 6 ? (
-        <div className="space-y-6">
-          <section className="grid gap-4 md:grid-cols-3">
-            {(["preferred", "standard", "out_of_network"] as const).map((status) => (
-              <Card key={status}>
-                <CardContent className="space-y-1.5 p-5">
-                  <NetworkStatusChip status={status} />
-                  <p className="text-data text-3xl font-semibold text-deepwater">
-                    {state.stagedNetwork.byStatus[status].toLocaleString()}
-                  </p>
-                </CardContent>
-              </Card>
-            ))}
-          </section>
-          <Card>
-            <CardContent className="p-0">
-              <Table>
-                <THead>
-                  <tr>
-                    <TH>Pharmacy</TH>
-                    <TH>Status</TH>
-                  </tr>
-                </THead>
-                <TBody>
-                  {state.stagedNetwork.sample.map((row, i) => (
-                    <TRow key={i} className="hover:bg-transparent">
-                      <TCell>
-                        <span className="text-sm font-medium text-deepwater">{row.pharmacyName}</span>
-                        {row.city ? <span className="ml-2 text-xs text-steel">{row.city}</span> : null}
-                      </TCell>
-                      <TCell>
-                        <NetworkStatusChip status={row.status} />
-                      </TCell>
-                    </TRow>
-                  ))}
-                </TBody>
-              </Table>
-              <p className="border-t border-mist/55 px-4 py-2 text-xs text-steel">
-                {state.stagedNetwork.total.toLocaleString()} staged pharmacies on the carrier
-                network — shared by all {state.plans.length} plans.
-              </p>
-            </CardContent>
-          </Card>
-          <div className="flex justify-end">
-            <Button asChild>
-              <Link href={stepHref(7)}>Looks right — continue to finalize →</Link>
-            </Button>
-          </div>
-        </div>
-      ) : null}
-
-      {step === 7 ? (
         <Card>
           <CardContent className="space-y-4 p-6">
             <p className="text-eyebrow">Ready to commit</p>
@@ -404,12 +319,20 @@ export default async function FormularyWizardPage({ searchParams }: WizardPagePr
                   ? ` — ${state.plans.filter((p) => p.stagedTierCosts.length > 0).length} with staged cost sharing`
                   : " — no staged cost sharing (plans stay unpriced)"}
               </li>
-              <li>
-                <span className="text-data font-semibold">
-                  {state.stagedNetwork.total.toLocaleString()}
-                </span>{" "}
-                pharmacy network links go live
-              </li>
+              {state.stagedNetwork.total > 0 ? (
+                <li>
+                  <span className="text-data font-semibold">
+                    {state.stagedNetwork.total.toLocaleString()}
+                  </span>{" "}
+                  staged pharmacy network rows go live
+                </li>
+              ) : (
+                <li className="text-steel">
+                  Pharmacy network: managed on the carrier page —{" "}
+                  <span className="text-data">{state.liveNetworkCount.toLocaleString()}</span>{" "}
+                  pharmacies on file for {formulary.planYear}
+                </li>
+              )}
             </ul>
             <p className="text-xs text-steel">
               This is the only step that changes what agents see. Everything before it was staging.

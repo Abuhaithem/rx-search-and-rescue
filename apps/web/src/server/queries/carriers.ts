@@ -1,5 +1,5 @@
-import { and, count, desc, eq } from "drizzle-orm";
-import { carrierPharmacyNetworks, formularies, getDb, plans } from "@rxsr/db";
+import { and, count, desc, eq, inArray } from "drizzle-orm";
+import { carrierPharmacyNetworks, formularies, getDb, ingestionJobs, plans } from "@rxsr/db";
 import { createSignedDownloadUrl } from "../storage";
 import { isTierCostsComplete } from "./plans";
 
@@ -22,6 +22,9 @@ export interface CarrierFormularySummary {
   status: FormularyStatus;
   totalEntries: number;
   needsReview: number;
+  /** Latest ingest job failed — surfaced with a delete affordance. */
+  jobFailed: boolean;
+  jobError: string | null;
 }
 
 export interface CarrierCatalogRow {
@@ -76,6 +79,26 @@ export async function getCarrierCatalog(planYear: number): Promise<CarrierCatalo
     },
   });
 
+  const formularyIds = rows.flatMap((c) => c.formularies.map((f) => f.id));
+  const failedByFormulary = new Map<string, string | null>();
+  if (formularyIds.length > 0) {
+    const jobs = await db
+      .select({
+        targetId: ingestionJobs.targetId,
+        status: ingestionJobs.status,
+        error: ingestionJobs.error,
+      })
+      .from(ingestionJobs)
+      .where(and(eq(ingestionJobs.kind, "formulary"), inArray(ingestionJobs.targetId, formularyIds)))
+      .orderBy(desc(ingestionJobs.createdAt));
+    const seen = new Set<string>();
+    for (const job of jobs) {
+      if (!job.targetId || seen.has(job.targetId)) continue;
+      seen.add(job.targetId);
+      if (job.status === "failed") failedByFormulary.set(job.targetId, job.error);
+    }
+  }
+
   return Promise.all(
     rows.map(async (carrier) => ({
       id: carrier.id,
@@ -101,6 +124,8 @@ export async function getCarrierCatalog(planYear: number): Promise<CarrierCatalo
         status: formulary.status,
         totalEntries: formulary.stats?.totalEntries ?? 0,
         needsReview: formulary.stats?.needsReview ?? 0,
+        jobFailed: failedByFormulary.has(formulary.id),
+        jobError: failedByFormulary.get(formulary.id) ?? null,
       })),
     })),
   );

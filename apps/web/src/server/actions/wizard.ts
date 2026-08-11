@@ -200,55 +200,8 @@ export async function uploadSummaryOfBenefits(
   }
 }
 
-/** Step 5 — formData: pdf. The network is the CARRIER's; rows land staged. */
-export async function uploadWizardDirectory(
-  formularyId: string,
-  formData: FormData,
-): Promise<ActionResult<{ ingestionJobId: string }>> {
-  try {
-    const profile = await requireRole("admin", "manager");
-    uuidSchema.parse(formularyId);
-    const file = requirePdf(formData);
-
-    const db = getDb();
-    const formulary = await db.query.formularies.findFirst({
-      where: eq(formularies.id, formularyId),
-    });
-    if (!formulary) return err("Formulary not found");
-
-    const storagePath = `pharmacy-directories/carrier-${formulary.carrierId}.pdf`;
-    await uploadObject(storagePath, new Uint8Array(await file.arrayBuffer()), "application/pdf");
-
-    const { ingestionJobId } = await enqueueIngestionJob({
-      kind: "pharmacy_directory",
-      queue: QUEUE_NAMES.pharmacyDirectory,
-      targetId: formularyId,
-      payload: (jobId) => ({
-        ingestionJobId: jobId,
-        carrierId: formulary.carrierId,
-        planYear: formulary.planYear,
-        storagePath,
-        staged: true,
-      }),
-    });
-
-    await writeAudit(db, {
-      actorId: profile.id,
-      action: "plan.wizard_directory_uploaded",
-      entityType: "formulary",
-      entityId: formularyId,
-      meta: { fileName: file.name, ingestionJobId },
-    });
-
-    revalidatePath("/", "layout");
-    return ok({ ingestionJobId });
-  } catch (e) {
-    return err(errorMessage(e));
-  }
-}
-
 /**
- * Step 7 — the single atomic commit: apply staged SoB values to plan columns,
+ * Finalize — the single atomic commit: apply staged SoB values to plan columns,
  * flip staged tier-cost and network rows live (staged data replaces any older
  * automated rows), and activate the formulary.
  */

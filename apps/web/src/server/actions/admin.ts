@@ -339,6 +339,50 @@ export async function addFormularyEntry(
   }
 }
 
+/**
+ * Remove a formulary that never went live (failed extraction, abandoned
+ * setup). Active formularies must be superseded by a new upload instead.
+ */
+export async function deleteFormulary(
+  formularyId: string,
+): Promise<ActionResult<{ formularyId: string }>> {
+  try {
+    const profile = await requireRole("admin", "manager");
+    uuidSchema.parse(formularyId);
+
+    const db = getDb();
+    const formulary = await db.query.formularies.findFirst({
+      where: eq(formularies.id, formularyId),
+    });
+    if (!formulary) return err("Formulary not found");
+    if (formulary.status === "active") {
+      return err("This formulary is live — upload a replacement to supersede it instead");
+    }
+
+    await db.transaction(async (tx) => {
+      // Plans that pointed at it lose the link but keep their pricing.
+      await tx
+        .update(plans)
+        .set({ formularyId: null })
+        .where(eq(plans.formularyId, formularyId));
+      // Entries and legends cascade with the row.
+      await tx.delete(formularies).where(eq(formularies.id, formularyId));
+      await writeAudit(tx, {
+        actorId: profile.id,
+        action: "formulary.deleted",
+        entityType: "formulary",
+        entityId: formularyId,
+        meta: { label: formulary.label, status: formulary.status },
+      });
+    });
+
+    revalidatePath("/", "layout");
+    return ok({ formularyId });
+  } catch (e) {
+    return err(errorMessage(e));
+  }
+}
+
 export async function resolveReviewRow(
   entryId: string,
   decision: ReviewDecision,

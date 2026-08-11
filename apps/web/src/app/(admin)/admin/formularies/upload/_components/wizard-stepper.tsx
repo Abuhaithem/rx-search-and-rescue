@@ -6,8 +6,6 @@ export const WIZARD_STEPS = [
   "Preview",
   "Summary of Benefits",
   "Preview",
-  "Pharmacy Network",
-  "Preview",
   "Finalize",
 ] as const;
 

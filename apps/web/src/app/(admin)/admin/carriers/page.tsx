@@ -8,8 +8,10 @@ import { PageHeader } from "@/components/domain/page-header";
 import { CarrierLogo } from "@/components/domain/carrier-logo";
 import { formatUsd } from "@/components/domain/format";
 import { cn } from "@/lib/utils";
-import { searchPharmaciesByZip } from "../_lib/pharmacies";
+import { getLatestDirectoryJob, searchPharmaciesByZip } from "../_lib/pharmacies";
+import { RefreshPoller } from "../formularies/_components/refresh-poller";
 import { CarrierDialog } from "./_components/carrier-dialog";
+import { DeleteFormularyButton } from "./_components/delete-formulary-button";
 import { CarrierNetworkSection } from "./_components/carrier-network-section";
 import { WorkbookDialog } from "./_components/workbook-dialog";
 import { YearSwitcher } from "./_components/year-switcher";
@@ -31,11 +33,16 @@ export default async function CarriersPage({ searchParams }: CarriersPageProps) 
   const selected =
     catalog.find((c) => c.id === params.carrier) ?? catalog[0] ?? null;
   const zip = /^\d{5}$/.test(params.zip ?? "") ? params.zip! : null;
-  const pharmacyResults =
-    selected && zip ? await searchPharmaciesByZip(zip, selected.id, year) : [];
+  const [pharmacyResults, directoryJob] = await Promise.all([
+    selected && zip ? searchPharmaciesByZip(zip, selected.id, year) : Promise.resolve([]),
+    selected ? getLatestDirectoryJob(selected.id) : Promise.resolve(null),
+  ]);
+  const directoryRunning =
+    directoryJob?.status === "running" || directoryJob?.status === "queued";
 
   return (
     <div className="space-y-6">
+      <RefreshPoller active={directoryRunning} />
       <PageHeader
         title="Carriers"
         description={`Everything loaded for plan year ${year}: each carrier's formularies, plans, and what still needs attention.`}
@@ -200,12 +207,25 @@ export default async function CarriersPage({ searchParams }: CarriersPageProps) 
                                   {formulary.needsReview} to review
                                 </span>
                               ) : null}
-                              <span className="rounded-chip bg-restricted-soft px-2 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-[0.1em] text-restricted">
-                                {formulary.status === "ingesting" ? "Reading" : "Setup"}
-                              </span>
+                              {formulary.jobFailed ? (
+                                <span
+                                  title={formulary.jobError ?? undefined}
+                                  className="rounded-chip bg-notcovered-soft px-2 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-[0.1em] text-notcovered"
+                                >
+                                  Failed
+                                </span>
+                              ) : (
+                                <span className="rounded-chip bg-restricted-soft px-2 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-[0.1em] text-restricted">
+                                  {formulary.status === "ingesting" ? "Reading" : "Setup"}
+                                </span>
+                              )}
                               <span className="text-data text-xs text-steel">
                                 {formulary.totalEntries.toLocaleString()} drugs
                               </span>
+                              <DeleteFormularyButton
+                                formularyId={formulary.id}
+                                label={formulary.label}
+                              />
                             </span>
                           </li>
                         ))}
@@ -276,6 +296,7 @@ export default async function CarriersPage({ searchParams }: CarriersPageProps) 
                 networkCount={selected.networkCount}
                 zip={zip}
                 results={pharmacyResults}
+                job={directoryJob}
               />
 
               <p className="text-xs text-steel">

@@ -27,7 +27,7 @@ import { Separator } from "@/components/ui/separator";
 import { toast } from "@/components/ui/sonner";
 import { attachCarrierDirectory, setCarrierPharmacyStatus } from "@/server/actions/admin";
 import type { NetworkStatus } from "@rxsr/core";
-import type { PharmacyZipRow } from "../../_lib/pharmacies";
+import type { DirectoryJobStatus, PharmacyZipRow } from "../../_lib/pharmacies";
 
 const STATUS_OPTIONS: { value: NetworkStatus; label: string }[] = [
   { value: "preferred", label: "In network · Preferred" },
@@ -46,12 +46,14 @@ export function CarrierNetworkSection({
   networkCount,
   zip,
   results,
+  job,
 }: {
   carrierId: string;
   year: number;
   networkCount: number;
   zip: string | null;
   results: PharmacyZipRow[];
+  job: DirectoryJobStatus | null;
 }) {
   const router = useRouter();
   const [zipInput, setZipInput] = useState(zip ?? "");
@@ -94,6 +96,17 @@ export function CarrierNetworkSection({
             <AttachDirectoryDialog carrierId={carrierId} planYear={year} hasNetwork={networkCount > 0} />
           </div>
         </div>
+        {job?.status === "running" || job?.status === "queued" ? (
+          <p className="rounded-card bg-fog px-3 py-2 text-sm text-deepwater">
+            <span className="font-semibold">Reading the directory…</span>{" "}
+            {job.message ?? "queued"} — this page refreshes itself.
+          </p>
+        ) : job?.status === "failed" ? (
+          <p className="rounded-card bg-notcovered-soft px-3 py-2 text-sm text-notcovered">
+            <span className="font-semibold">Directory import failed:</span>{" "}
+            {job.error ?? "unknown error"}. Upload the PDF again to retry.
+          </p>
+        ) : null}
         <p className="text-xs text-steel">
           One network per carrier: the directory (or workbook) marks each pharmacy preferred /
           standard / out of network for all plans at once. Statuses you set here are

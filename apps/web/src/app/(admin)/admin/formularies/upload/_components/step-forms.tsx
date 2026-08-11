@@ -9,7 +9,6 @@ import {
   finalizeFormularyWizard,
   startFormularyWizard,
   uploadSummaryOfBenefits,
-  uploadWizardDirectory,
 } from "@/server/actions/wizard";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -274,41 +273,7 @@ export function SobUploadForm({
   );
 }
 
-// ─── Step 5: directory upload ────────────────────────────────────────────────
-
-export function DirectoryUploadForm({ formularyId }: { formularyId: string }) {
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
-
-  const submit = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const formData = new FormData(event.currentTarget);
-    startTransition(async () => {
-      const result = await uploadWizardDirectory(formularyId, formData);
-      if (!result.ok) {
-        toast.error(result.error);
-        return;
-      }
-      toast.success("Pharmacy directory queued — network statuses are being read");
-      router.refresh();
-    });
-  };
-
-  return (
-    <form onSubmit={submit} className="flex items-end gap-3">
-      <div className="flex-1 space-y-1.5">
-        <Label htmlFor="directory-pdf">Pharmacy directory PDF</Label>
-        <Input id="directory-pdf" name="pdf" type="file" accept=".pdf,application/pdf" required />
-      </div>
-      <Button type="submit" disabled={pending}>
-        {pending ? <Loader2 className="animate-spin" /> : <Upload className="size-4" />}
-        Extract network
-      </Button>
-    </form>
-  );
-}
-
-// ─── Step 7: finalize ────────────────────────────────────────────────────────
+// ─── Step 5: finalize ────────────────────────────────────────────────────────
 
 export function FinalizeButton({
   formularyId,

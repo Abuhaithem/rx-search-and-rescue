@@ -3,7 +3,7 @@
  * ZIP plus each one's status on the CARRIER's network (+ verifier name).
  * Read-only. Never import from client code.
  */
-import { and, asc, carrierPharmacyNetworks, eq, getDb, inArray, pharmacies, profiles } from "@rxsr/db";
+import { and, asc, carrierPharmacyNetworks, desc, eq, getDb, inArray, ingestionJobs, pharmacies, profiles, sql } from "@rxsr/db";
 import type { NetworkStatus } from "@rxsr/core";
 
 export interface PharmacyZipRow {
@@ -61,4 +61,28 @@ export async function searchPharmaciesByZip(zip: string, carrierId: string, plan
       verifiedByName: network?.verifiedByName ?? null,
     };
   });
+}
+
+export interface DirectoryJobStatus {
+  status: string;
+  message: string | null;
+  error: string | null;
+}
+
+/** Latest carrier-directory ingest job — powers the network section's progress line. */
+export async function getLatestDirectoryJob(
+  carrierId: string,
+): Promise<DirectoryJobStatus | null> {
+  const db = getDb();
+  const [job] = await db
+    .select({
+      status: ingestionJobs.status,
+      message: sql<string | null>`${ingestionJobs.progress} ->> 'message'`,
+      error: ingestionJobs.error,
+    })
+    .from(ingestionJobs)
+    .where(and(eq(ingestionJobs.kind, "pharmacy_directory"), eq(ingestionJobs.targetId, carrierId)))
+    .orderBy(desc(ingestionJobs.createdAt))
+    .limit(1);
+  return job ?? null;
 }
