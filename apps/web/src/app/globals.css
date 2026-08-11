@@ -60,7 +60,6 @@
   --color-fog: #0c141f;
   --color-steel: #93a4b6;
   --color-mist: #2b3a4c;
-  --color-white: #16212f;
 
   --color-covered: #55c08a;
   --color-covered-soft: #12301f;
@@ -81,11 +80,23 @@
   --shadow-button: 0 1px 2px rgb(0 0 0 / 0.55);
 }
 
+/*
+ * Surface pins. `--color-white` is deliberately NOT overridden: text-white,
+ * ring-white/15 etc. must stay genuinely white on the dark surfaces below —
+ * only white-as-a-surface flips to the raised dark card color.
+ */
+.dark .bg-white {
+  background-color: #16212f;
+}
 .dark .bg-deepwater {
   background-color: #0b1826;
 }
 .dark .bg-harbor {
   background-color: #1c2f45;
+}
+.dark ::selection {
+  background: #8db1d8;
+  color: #0b1826;
 }
 
 @layer base {

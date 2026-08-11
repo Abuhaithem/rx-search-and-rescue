@@ -1,37 +1,51 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { LogoLockup } from "@/components/brand/logo-lockup";
 import { cn } from "@/lib/utils";
 
 /**
- * Deepwater app bar + fog workspace. Content is constrained to max-w-6xl per
- * the layout contract. Server-compatible: pass activeNav from the page.
+ * THE app header — one bar shared by every signed-in screen. Deepwater ink,
+ * flat role-aware navigation (no sub-nav rows): agents see Dashboard, admins
+ * additionally see Carriers and Plans. Active state derives from the path;
+ * the avatar is the door to /settings. Content constrained to max-w-6xl per
+ * the layout contract.
  */
 
 interface AppShellProps {
   userName: string;
-  /** e.g. "Insurance Specialists Group" — shown after the user name. */
+  /** e.g. "Insurance Specialists Group" — shown under the user name. */
   organizationName?: string;
-  activeNav?: "dashboard" | "admin";
-  /** Admin nav is only rendered for admin/manager roles. */
+  /** Admin nav items render only for admin/manager roles. */
   showAdminNav?: boolean;
   children: React.ReactNode;
   className?: string;
 }
 
-const navItems = [
-  { key: "dashboard", label: "Dashboard", href: "/" },
-  { key: "admin", label: "Admin", href: "/admin" },
-] as const;
+interface NavItem {
+  label: string;
+  href: string;
+  /** Path prefixes that mark this item active. */
+  match: string[];
+  adminOnly?: boolean;
+}
+
+const NAV_ITEMS: NavItem[] = [
+  { label: "Dashboard", href: "/dashboard", match: ["/dashboard", "/intake", "/analysis"] },
+  { label: "Carriers", href: "/admin/carriers", match: ["/admin/carriers", "/admin/formularies"], adminOnly: true },
+  { label: "Plans", href: "/admin/plans", match: ["/admin/plans"], adminOnly: true },
+];
 
 function AppShell({
   userName,
   organizationName,
-  activeNav,
   showAdminNav = false,
   children,
   className,
 }: AppShellProps) {
-  const visibleNavItems = navItems.filter((item) => item.key !== "admin" || showAdminNav);
+  const pathname = usePathname();
+  const items = NAV_ITEMS.filter((item) => !item.adminOnly || showAdminNav);
   const initials = userName
     .split(/\s+/)
     .filter(Boolean)
@@ -41,30 +55,33 @@ function AppShell({
 
   return (
     <div className="flex min-h-screen flex-col bg-fog">
-      <header className="sticky top-0 z-40 bg-deepwater text-white shadow-[0_2px_10px_-2px_rgb(14_29_47/0.4)]">
+      <header className="sticky top-0 z-40 bg-deepwater text-white shadow-[0_2px_10px_-2px_rgb(0_0_0/0.35)]">
         <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-8 px-6">
           <Link
-            href="/"
+            href="/dashboard"
             className="rounded-sm transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
           >
             <LogoLockup />
           </Link>
           <nav aria-label="Primary" className="flex items-center gap-1">
-            {visibleNavItems.map((item) => (
-              <Link
-                key={item.key}
-                href={item.href}
-                aria-current={activeNav === item.key ? "page" : undefined}
-                className={cn(
-                  "rounded-md px-3 py-1.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60",
-                  activeNav === item.key
-                    ? "bg-harbor text-white shadow-inner"
-                    : "text-white/65 hover:bg-harbor/60 hover:text-white",
-                )}
-              >
-                {item.label}
-              </Link>
-            ))}
+            {items.map((item) => {
+              const active = item.match.some((prefix) => pathname.startsWith(prefix));
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  aria-current={active ? "page" : undefined}
+                  className={cn(
+                    "rounded-md px-3 py-1.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60",
+                    active
+                      ? "bg-harbor text-white shadow-inner"
+                      : "text-white/65 hover:bg-harbor/60 hover:text-white",
+                  )}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
           </nav>
           <div className="ml-auto flex items-center gap-3">
             <div className="hidden text-right leading-tight sm:block">

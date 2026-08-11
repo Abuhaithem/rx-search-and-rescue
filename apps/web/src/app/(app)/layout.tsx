@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getProfile } from "@/server/queries/profile";
-import { Shell } from "./_components/shell";
+import { AppShell } from "@/components/domain/app-shell";
+import { Toaster } from "@/components/ui/sonner";
 
 export const dynamic = "force-dynamic";
 
@@ -9,12 +10,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (!profile) redirect("/login");
 
   return (
-    <Shell
+    <AppShell
       userName={profile.fullName}
       organizationName="Insurance Specialists Group"
       showAdminNav={profile.role !== "agent"}
     >
       {children}
-    </Shell>
+      <Toaster />
+    </AppShell>
   );
 }
