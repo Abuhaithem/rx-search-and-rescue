@@ -65,4 +65,5 @@ pnpm typecheck && pnpm test && pnpm build   # the gate for every change
 ```
 
 Conventions live in `CLAUDE.md`; design system contract in `DESIGN_SYSTEM.md`;
-server API surface in `docs/CONTRACTS.md`.
+server API surface in `docs/CONTRACTS.md`. Production deploys: `docs/DEPLOYMENT.md`
+(one-time infra setup: `docs/AWS_MIGRATION.md`).
