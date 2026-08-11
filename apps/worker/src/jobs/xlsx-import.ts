@@ -169,12 +169,17 @@ export async function runXlsxImport(
           .insert(carrierPharmacyNetworks)
           .values({
             carrierId: job.carrierId,
+            planYear: job.planYear,
             pharmacyId: pharmacy.id,
             status: rule.status,
             source: "xlsx",
           })
           .onConflictDoUpdate({
-            target: [carrierPharmacyNetworks.carrierId, carrierPharmacyNetworks.pharmacyId],
+            target: [
+              carrierPharmacyNetworks.carrierId,
+              carrierPharmacyNetworks.planYear,
+              carrierPharmacyNetworks.pharmacyId,
+            ],
             set: { status: rule.status, source: "xlsx" },
             setWhere: sql`${carrierPharmacyNetworks.source} <> 'agent'`,
           });

@@ -145,6 +145,8 @@ export const carrierPharmacyNetworks = pgTable(
     carrierId: uuid("carrier_id")
       .notNull()
       .references(() => carriers.id, { onDelete: "cascade" }),
+    /** Networks change between plan years — never compared across years. */
+    planYear: integer("plan_year").notNull(),
     pharmacyId: uuid("pharmacy_id")
       .notNull()
       .references(() => pharmacies.id, { onDelete: "cascade" }),
@@ -155,7 +157,9 @@ export const carrierPharmacyNetworks = pgTable(
     verifiedBy: uuid("verified_by").references(() => profiles.id),
     verifiedAt: timestamp("verified_at", { withTimezone: true }),
   },
-  (t) => [uniqueIndex("carrier_pharmacy_networks_uq").on(t.carrierId, t.pharmacyId)],
+  (t) => [
+    uniqueIndex("carrier_pharmacy_networks_uq").on(t.carrierId, t.planYear, t.pharmacyId),
+  ],
 );
 
 /** One row per formulary DOCUMENT edition. Many plans may share one formulary. */

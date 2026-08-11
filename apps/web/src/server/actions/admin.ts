@@ -603,25 +603,33 @@ export async function setServiceAreas(
 /** formData: pdf. The directory feeds the CARRIER's single network. */
 export async function attachCarrierDirectory(
   carrierId: string,
+  planYear: number,
   formData: FormData,
 ): Promise<ActionResult<{ carrierId: string; ingestionJobId: string }>> {
   try {
     const profile = await requireRole("admin", "manager");
-    uuidSchema.parse(carrierId);
+    const input = z
+      .object({ carrierId: uuidSchema, planYear: z.coerce.number().int().min(2020).max(2100) })
+      .parse({ carrierId, planYear });
     const file = requirePdf(formData);
 
     const db = getDb();
     const [carrier] = await db.select().from(carriers).where(eq(carriers.id, carrierId));
     if (!carrier) return err("Carrier not found");
 
-    const storagePath = `pharmacy-directories/carrier-${carrierId}.pdf`;
+    const storagePath = `pharmacy-directories/carrier-${carrierId}-${input.planYear}.pdf`;
     await uploadObject(storagePath, new Uint8Array(await file.arrayBuffer()), "application/pdf");
 
     const { ingestionJobId } = await enqueueIngestionJob({
       kind: "pharmacy_directory",
       queue: QUEUE_NAMES.pharmacyDirectory,
       targetId: carrierId,
-      payload: (jobId) => ({ ingestionJobId: jobId, carrierId, storagePath }),
+      payload: (jobId) => ({
+        ingestionJobId: jobId,
+        carrierId,
+        planYear: input.planYear,
+        storagePath,
+      }),
     });
 
     await writeAudit(db, {
@@ -629,7 +637,7 @@ export async function attachCarrierDirectory(
       action: "carrier.pharmacy_directory_attached",
       entityType: "carrier",
       entityId: carrierId,
-      meta: { storagePath, ingestionJobId },
+      meta: { storagePath, planYear: input.planYear, ingestionJobId },
     });
 
     revalidatePath("/", "layout");
@@ -817,20 +825,27 @@ export async function importCmsData(
 /** Agent-verified status on the carrier's network — outranks every import. */
 export async function setCarrierPharmacyStatus(
   carrierId: string,
+  planYear: number,
   pharmacyId: string,
   status: NetworkStatus,
 ): Promise<ActionResult<{ carrierId: string; pharmacyId: string }>> {
   try {
     const profile = await requireRole("admin", "manager");
     const input = z
-      .object({ carrierId: uuidSchema, pharmacyId: uuidSchema, status: networkStatusSchema })
-      .parse({ carrierId, pharmacyId, status });
+      .object({
+        carrierId: uuidSchema,
+        planYear: z.coerce.number().int().min(2020).max(2100),
+        pharmacyId: uuidSchema,
+        status: networkStatusSchema,
+      })
+      .parse({ carrierId, planYear, pharmacyId, status });
 
     const db = getDb();
     await db
       .insert(carrierPharmacyNetworks)
       .values({
         carrierId: input.carrierId,
+        planYear: input.planYear,
         pharmacyId: input.pharmacyId,
         status: input.status,
         source: "agent",
@@ -838,7 +853,11 @@ export async function setCarrierPharmacyStatus(
         verifiedAt: new Date(),
       })
       .onConflictDoUpdate({
-        target: [carrierPharmacyNetworks.carrierId, carrierPharmacyNetworks.pharmacyId],
+        target: [
+          carrierPharmacyNetworks.carrierId,
+          carrierPharmacyNetworks.planYear,
+          carrierPharmacyNetworks.pharmacyId,
+        ],
         set: { status: input.status, source: "agent", verifiedBy: profile.id, verifiedAt: new Date() },
       });
 

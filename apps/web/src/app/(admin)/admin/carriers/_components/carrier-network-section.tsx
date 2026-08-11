@@ -71,7 +71,7 @@ export function CarrierNetworkSection({
   function handleSetStatus(pharmacyId: string, status: NetworkStatus) {
     setPendingPharmacyId(pharmacyId);
     startTransition(async () => {
-      const result = await setCarrierPharmacyStatus(carrierId, pharmacyId, status);
+      const result = await setCarrierPharmacyStatus(carrierId, year, pharmacyId, status);
       setPendingPharmacyId(null);
       if (!result.ok) {
         toast.error(result.error);
@@ -87,11 +87,11 @@ export function CarrierNetworkSection({
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <p className="text-eyebrow">Pharmacy network</p>
           <span className="text-data text-xs text-steel">
-            {networkCount.toLocaleString()} pharmacies on file — shared by every plan of this
-            carrier
+            {networkCount.toLocaleString()} pharmacies on file for {year} — shared by every plan
+            of this carrier
           </span>
           <div className="ml-auto">
-            <AttachDirectoryDialog carrierId={carrierId} hasNetwork={networkCount > 0} />
+            <AttachDirectoryDialog carrierId={carrierId} planYear={year} hasNetwork={networkCount > 0} />
           </div>
         </div>
         <p className="text-xs text-steel">
@@ -172,9 +172,11 @@ export function CarrierNetworkSection({
 
 function AttachDirectoryDialog({
   carrierId,
+  planYear,
   hasNetwork,
 }: {
   carrierId: string;
+  planYear: number;
   hasNetwork: boolean;
 }) {
   const router = useRouter();
@@ -191,7 +193,7 @@ function AttachDirectoryDialog({
     const formData = new FormData();
     formData.set("pdf", file);
     startTransition(async () => {
-      const result = await attachCarrierDirectory(carrierId, formData);
+      const result = await attachCarrierDirectory(carrierId, planYear, formData);
       if (!result.ok) {
         toast.error(result.error);
         return;

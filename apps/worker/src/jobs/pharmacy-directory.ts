@@ -106,13 +106,18 @@ export async function runPharmacyDirectory(
           .insert(carrierPharmacyNetworks)
           .values({
             carrierId: job.carrierId,
+            planYear: job.planYear,
             pharmacyId,
             status,
             source: "directory",
             staged: job.staged ?? false,
           })
           .onConflictDoUpdate({
-            target: [carrierPharmacyNetworks.carrierId, carrierPharmacyNetworks.pharmacyId],
+            target: [
+              carrierPharmacyNetworks.carrierId,
+              carrierPharmacyNetworks.planYear,
+              carrierPharmacyNetworks.pharmacyId,
+            ],
             set: { status, source: "directory", staged: job.staged ?? false },
             // Agent-set rows outrank every automated source.
             setWhere: sql`${carrierPharmacyNetworks.source} <> 'agent'`,

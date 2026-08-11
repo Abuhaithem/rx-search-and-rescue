@@ -50,7 +50,7 @@ export default async function FormularyWizardPage({ searchParams }: WizardPagePr
     const year = Number(params.year) || fallbackYear;
     const [carriers, years] = await Promise.all([
       getCarrierCatalog(year),
-      getPlanYears(fallbackYear),
+      getPlanYears(fallbackYear, { includePlanning: true }),
     ]);
     return (
       <div className="space-y-6">

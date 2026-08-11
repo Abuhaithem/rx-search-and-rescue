@@ -136,6 +136,7 @@ export async function getWizardState(formularyId: string): Promise<WizardState |
     .where(
       and(
         eq(carrierPharmacyNetworks.carrierId, formulary.carrierId),
+        eq(carrierPharmacyNetworks.planYear, formulary.planYear),
         eq(carrierPharmacyNetworks.staged, true),
       ),
     )
@@ -155,6 +156,7 @@ export async function getWizardState(formularyId: string): Promise<WizardState |
     .where(
       and(
         eq(carrierPharmacyNetworks.carrierId, formulary.carrierId),
+        eq(carrierPharmacyNetworks.planYear, formulary.planYear),
         eq(carrierPharmacyNetworks.staged, true),
       ),
     )

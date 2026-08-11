@@ -1,4 +1,4 @@
-import { count, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq } from "drizzle-orm";
 import { carrierPharmacyNetworks, formularies, getDb, plans } from "@rxsr/db";
 import { createSignedDownloadUrl } from "../storage";
 import { isTierCostsComplete } from "./plans";
@@ -45,7 +45,12 @@ export async function getCarrierCatalog(planYear: number): Promise<CarrierCatalo
   const networkCounts = await db
     .select({ carrierId: carrierPharmacyNetworks.carrierId, value: count() })
     .from(carrierPharmacyNetworks)
-    .where(eq(carrierPharmacyNetworks.staged, false))
+    .where(
+      and(
+        eq(carrierPharmacyNetworks.staged, false),
+        eq(carrierPharmacyNetworks.planYear, planYear),
+      ),
+    )
     .groupBy(carrierPharmacyNetworks.carrierId);
   const networkByCarrier = new Map(networkCounts.map((r) => [r.carrierId, r.value]));
 
@@ -102,9 +107,15 @@ export async function getCarrierCatalog(planYear: number): Promise<CarrierCatalo
 /**
  * Every plan year present in the DB (plans ∪ formularies), newest first.
  * The UI never hardcodes year lists; fallbackYear (usually the current year)
- * is included so a fresh install still has something to select.
+ * is included so a fresh install still has something to select. Creation
+ * screens pass includePlanning so the NEXT year is offered before any data
+ * exists for it (AEP prep: 2027 plans load during fall 2026) — data filters
+ * (dashboard) stay strictly DB-driven.
  */
-export async function getPlanYears(fallbackYear: number): Promise<number[]> {
+export async function getPlanYears(
+  fallbackYear: number,
+  options: { includePlanning?: boolean } = {},
+): Promise<number[]> {
   const db = getDb();
   const [planYears, formularyYears] = await Promise.all([
     db.selectDistinct({ year: plans.planYear }).from(plans).orderBy(desc(plans.planYear)),
@@ -115,6 +126,7 @@ export async function getPlanYears(fallbackYear: number): Promise<number[]> {
   ]);
   const years = new Set<number>([
     fallbackYear,
+    ...(options.includePlanning ? [fallbackYear + 1] : []),
     ...planYears.map((r) => r.year),
     ...formularyYears.map((r) => r.year),
   ]);

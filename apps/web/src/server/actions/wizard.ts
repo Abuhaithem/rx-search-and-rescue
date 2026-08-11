@@ -226,6 +226,7 @@ export async function uploadWizardDirectory(
       payload: (jobId) => ({
         ingestionJobId: jobId,
         carrierId: formulary.carrierId,
+        planYear: formulary.planYear,
         storagePath,
         staged: true,
       }),
@@ -327,6 +328,7 @@ export async function finalizeFormularyWizard(
         .where(
           and(
             eq(carrierPharmacyNetworks.carrierId, formulary.carrierId),
+            eq(carrierPharmacyNetworks.planYear, formulary.planYear),
             eq(carrierPharmacyNetworks.staged, true),
           ),
         );

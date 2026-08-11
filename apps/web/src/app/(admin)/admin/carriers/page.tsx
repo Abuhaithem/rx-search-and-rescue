@@ -25,14 +25,14 @@ export default async function CarriersPage({ searchParams }: CarriersPageProps) 
   const fallbackYear = new Date().getFullYear();
   const year = Number(params.year) || fallbackYear;
   const [years, catalog] = await Promise.all([
-    getPlanYears(fallbackYear),
+    getPlanYears(fallbackYear, { includePlanning: true }),
     getCarrierCatalog(year),
   ]);
   const selected =
     catalog.find((c) => c.id === params.carrier) ?? catalog[0] ?? null;
   const zip = /^\d{5}$/.test(params.zip ?? "") ? params.zip! : null;
   const pharmacyResults =
-    selected && zip ? await searchPharmaciesByZip(zip, selected.id) : [];
+    selected && zip ? await searchPharmaciesByZip(zip, selected.id, year) : [];
 
   return (
     <div className="space-y-6">

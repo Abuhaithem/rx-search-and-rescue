@@ -27,8 +27,9 @@ export interface RxcIntakeJob {
 
 export interface PharmacyDirectoryJob {
   ingestionJobId: string;
-  /** The network belongs to the carrier — one extraction, one network. */
+  /** The network belongs to the carrier, scoped to one plan year. */
   carrierId: string;
+  planYear: number;
   storagePath: string;
   /** Wizard staging: rows land invisible until Finalize. */
   staged?: boolean;

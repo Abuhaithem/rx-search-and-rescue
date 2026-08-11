@@ -16,7 +16,7 @@ export interface PharmacyZipRow {
   verifiedByName: string | null;
 }
 
-export async function searchPharmaciesByZip(zip: string, carrierId: string): Promise<PharmacyZipRow[]> {
+export async function searchPharmaciesByZip(zip: string, carrierId: string, planYear: number): Promise<PharmacyZipRow[]> {
   const db = getDb();
   const rows = await db
     .select({
@@ -43,6 +43,7 @@ export async function searchPharmaciesByZip(zip: string, carrierId: string): Pro
     .where(
       and(
         eq(carrierPharmacyNetworks.carrierId, carrierId),
+        eq(carrierPharmacyNetworks.planYear, planYear),
         eq(carrierPharmacyNetworks.staged, false),
         inArray(
           carrierPharmacyNetworks.pharmacyId,
