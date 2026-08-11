@@ -26,6 +26,8 @@ interface YearSwitcherProps {
   years: number[];
   value: number;
   basePath: string;
+  /** Only the carriers hub offers year creation; everywhere else is read-only. */
+  allowCreate?: boolean;
 }
 
 const ADD_YEAR = "__add__";
@@ -35,7 +37,7 @@ const ADD_YEAR = "__add__";
  * "Add year" simply navigates to the new year: years exist by having data,
  * so the empty year renders its guided setup and the first upload creates it.
  */
-export function YearSwitcher({ years, value, basePath }: YearSwitcherProps) {
+export function YearSwitcher({ years, value, basePath, allowCreate = false }: YearSwitcherProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [newYear, setNewYear] = useState(String(Math.max(...years, value) + 1));
@@ -77,12 +79,16 @@ export function YearSwitcher({ years, value, basePath }: YearSwitcherProps) {
               {year}
             </SelectItem>
           ))}
-          <SelectSeparator />
-          <SelectItem value={ADD_YEAR}>
-            <span className="flex items-center gap-1.5 font-semibold text-harbor">
-              <Plus className="size-3.5" /> Add year…
-            </span>
-          </SelectItem>
+          {allowCreate ? (
+            <>
+              <SelectSeparator />
+              <SelectItem value={ADD_YEAR}>
+                <span className="flex items-center gap-1.5 font-semibold text-harbor">
+                  <Plus className="size-3.5" /> Add year…
+                </span>
+              </SelectItem>
+            </>
+          ) : null}
         </SelectContent>
       </Select>
 

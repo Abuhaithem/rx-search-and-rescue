@@ -41,7 +41,7 @@ export default async function CarriersPage({ searchParams }: CarriersPageProps) 
         description={`Everything loaded for plan year ${year}: each carrier's formularies, plans, and what still needs attention.`}
         actions={
           <>
-            <YearSwitcher years={years} value={year} basePath="/admin/carriers" />
+            <YearSwitcher years={years} value={year} basePath="/admin/carriers" allowCreate />
             <CarrierDialog
               trigger={
                 <Button>
