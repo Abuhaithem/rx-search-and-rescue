@@ -18,6 +18,7 @@ export interface WizardJobStatus {
 }
 
 export interface WizardStagedTierCost {
+  id: string;
   channel: PharmacyChannel;
   tier: string;
   daysSupply: number;
@@ -205,6 +206,7 @@ export async function getWizardState(formularyId: string): Promise<WizardState |
       sobPath: plan.sobPath,
       sobStaged: plan.sobStaged,
       stagedTierCosts: plan.tierCosts.map((tc) => ({
+        id: tc.id,
         channel: tc.channel,
         tier: tc.tier,
         daysSupply: tc.daysSupply,

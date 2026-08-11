@@ -200,6 +200,86 @@ export async function uploadSummaryOfBenefits(
   }
 }
 
+const stagedCostPatchSchema = z
+  .object({
+    copayCents: z.number().int().min(0).nullable(),
+    coinsurancePct: z.number().min(0).max(100).nullable(),
+    maxCents: z.number().int().min(0).nullable(),
+  })
+  .refine((p) => (p.copayCents !== null) !== (p.coinsurancePct !== null), {
+    message: "Set a copay OR a coinsurance percentage, not both",
+  });
+
+/** Step 4 — correct a staged cell in place; only staged rows are editable. */
+export async function updateStagedTierCost(
+  costId: string,
+  patch: z.infer<typeof stagedCostPatchSchema>,
+): Promise<ActionResult<{ costId: string }>> {
+  try {
+    const profile = await requireRole("admin", "manager");
+    uuidSchema.parse(costId);
+    const input = stagedCostPatchSchema.parse(patch);
+
+    const db = getDb();
+    const [updated] = await db
+      .update(planTierCosts)
+      .set({
+        copayCents: input.copayCents,
+        coinsurancePct: input.coinsurancePct === null ? null : String(input.coinsurancePct),
+        maxCents: input.maxCents,
+        sourceNote: "SoB import — hand-corrected in preview",
+        verifiedBy: profile.id,
+        verifiedAt: new Date(),
+      })
+      .where(and(eq(planTierCosts.id, costId), eq(planTierCosts.staged, true)))
+      .returning({ id: planTierCosts.id, planId: planTierCosts.planId });
+    if (!updated) return err("Staged cost row not found (already finalized?)");
+
+    await writeAudit(db, {
+      actorId: profile.id,
+      action: "plan.staged_cost_edited",
+      entityType: "plan",
+      entityId: updated.planId,
+      meta: { costId, patch: input },
+    });
+
+    revalidatePath("/", "layout");
+    return ok({ costId });
+  } catch (e) {
+    return err(errorMessage(e));
+  }
+}
+
+/** Step 4 — drop a fabricated staged cell (e.g. a 90-day row the SBC marks N/A). */
+export async function deleteStagedTierCost(
+  costId: string,
+): Promise<ActionResult<{ costId: string }>> {
+  try {
+    const profile = await requireRole("admin", "manager");
+    uuidSchema.parse(costId);
+
+    const db = getDb();
+    const [removed] = await db
+      .delete(planTierCosts)
+      .where(and(eq(planTierCosts.id, costId), eq(planTierCosts.staged, true)))
+      .returning({ id: planTierCosts.id, planId: planTierCosts.planId });
+    if (!removed) return err("Staged cost row not found (already finalized?)");
+
+    await writeAudit(db, {
+      actorId: profile.id,
+      action: "plan.staged_cost_deleted",
+      entityType: "plan",
+      entityId: removed.planId,
+      meta: { costId },
+    });
+
+    revalidatePath("/", "layout");
+    return ok({ costId });
+  } catch (e) {
+    return err(errorMessage(e));
+  }
+}
+
 /**
  * Finalize — the single atomic commit: apply staged SoB values to plan columns,
  * flip staged tier-cost and network rows live (staged data replaces any older

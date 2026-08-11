@@ -11,6 +11,7 @@ import { RestrictionChip } from "@/components/domain/restriction-chip";
 import { formatUsd } from "@/components/domain/format";
 import { RefreshPoller } from "../_components/refresh-poller";
 import { ReviewTable } from "../_components/review-table";
+import { EditStagedCostDialog } from "./_components/staged-cost-editor";
 import {
   FinalizeButton,
   PlanNamesApprove,
@@ -270,6 +271,7 @@ export default async function FormularyWizardPage({ searchParams }: WizardPagePr
                           <TH>Channel</TH>
                           <TH>Supply</TH>
                           <TH>Member pays</TH>
+                          <TH className="w-12" aria-label="Edit" />
                         </tr>
                       </THead>
                       <TBody>
@@ -291,6 +293,12 @@ export default async function FormularyWizardPage({ searchParams }: WizardPagePr
                             </TCell>
                             <TCell className="text-data text-sm font-semibold text-deepwater">
                               {costLabel(cost)}
+                            </TCell>
+                            <TCell>
+                              <EditStagedCostDialog
+                                cost={cost}
+                                rowLabel={`${cost.tier.toUpperCase()} · ${CHANNEL_SHORT[cost.channel] ?? cost.channel} · ${cost.daysSupply}-day`}
+                              />
                             </TCell>
                           </TRow>
                         ))}
