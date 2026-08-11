@@ -55,8 +55,8 @@ export default async function FormularyWizardPage({ searchParams }: WizardPagePr
     return (
       <div className="space-y-6">
         <PageHeader
-          title="Load a formulary"
-          description="Four uploads, three previews — nothing goes live until the final step."
+          title="Add a drug plan"
+          description="A drug plan is its formulary list plus its Summary of Benefits. Upload the documents, review each preview — nothing goes live until the final step."
           backHref={`/admin/carriers?year=${year}`}
         />
         <WizardStepper current={1} />

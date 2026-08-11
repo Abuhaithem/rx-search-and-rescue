@@ -3,13 +3,12 @@ import { Check, Layers } from "lucide-react";
 import { EmptyState } from "@/components/domain/empty-state";
 import { PageHeader } from "@/components/domain/page-header";
 import { RestrictionChip } from "@/components/domain/restriction-chip";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { getPlanCatalog } from "@/server/queries/plans";
-import { listCarriers } from "../_lib/carriers";
 import { getLatestCmsImport } from "../_lib/cms-import";
 import { RefreshPoller } from "../formularies/_components/refresh-poller";
-import { AddPlanDialog } from "./_components/add-plan-dialog";
 import { ImportCmsDialog } from "./_components/import-cms-dialog";
 import { PlanEditor } from "./_components/plan-editor";
 
@@ -21,9 +20,8 @@ export default async function PlanCatalogPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const year = Number.parseInt(params.year ?? "", 10) || new Date().getFullYear();
 
-  const [catalog, carrierOptions, cmsImport] = await Promise.all([
+  const [catalog, cmsImport] = await Promise.all([
     getPlanCatalog(year),
-    listCarriers(),
     getLatestCmsImport(),
   ]);
   const selected = catalog.find((row) => row.plan.id === params.plan) ?? catalog[0] ?? null;
@@ -35,7 +33,9 @@ export default async function PlanCatalogPage({ searchParams }: PageProps) {
         actions={
           <div className="flex items-center gap-2">
             <ImportCmsDialog defaultYear={year} />
-            <AddPlanDialog carriers={carrierOptions} year={year} />
+            <Button asChild>
+              <Link href={`/admin/formularies/upload?year=${year}`}>Add drug plan →</Link>
+            </Button>
           </div>
         }
       />
@@ -51,7 +51,7 @@ export default async function PlanCatalogPage({ searchParams }: PageProps) {
         <EmptyState
           icon={<Layers />}
           title={`No plans for ${year} yet`}
-          description="Plans are created automatically when their formulary is uploaded — the admin never creates plans by hand after an upload. Upload a formulary first, then finish each plan's costs here."
+          description="A drug plan is born from its documents: upload the formulary list and Summary of Benefits, and the plan arrives here priced. This catalog is for reviewing and hand-correcting costs."
         />
       ) : (
         <div className="grid items-start gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">

@@ -214,17 +214,17 @@ export default async function CarriersPage({ searchParams }: CarriersPageProps) 
                   <div className="flex items-center justify-between">
                     <p className="text-eyebrow">Plans — {year}</p>
                     <Link
-                      href={`/admin/plans?year=${year}`}
+                      href={`/admin/formularies/upload?year=${year}`}
                       className="text-sm font-semibold text-harbor hover:underline"
                     >
-                      {selected.plans.length === 0 ? "Add plans →" : "Manage →"}
+                      Add drug plan →
                     </Link>
                   </div>
                   {selected.plans.length === 0 ? (
                     <p className="text-sm text-steel">
-                      <span className="font-semibold text-deepwater">Step 2:</span> add this
-                      carrier&apos;s plans, then enter each plan&apos;s Summary of Benefits tier
-                      costs and attach its pharmacy directory.
+                      No drug plans yet. A plan is created from its two documents — upload the
+                      formulary list and its Summary of Benefits, and the plan lands here priced
+                      and ready to review.
                     </p>
                   ) : (
                     <ul className="divide-y divide-mist/55">
