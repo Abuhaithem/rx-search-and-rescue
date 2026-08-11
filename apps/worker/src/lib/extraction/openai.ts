@@ -25,7 +25,13 @@ export const OPENAI_DEFAULT_MODEL = "gpt-5-mini";
  */
 export const OPENAI_MAX_CONTEXT_PAGES = 50;
 
-const MAX_OUTPUT_TOKENS = 16000;
+/**
+ * GPT-5-family models spend hidden REASONING tokens from this same budget —
+ * a dense page can exhaust 16k before any JSON is emitted (status:
+ * "incomplete", empty output). Generous cap + low reasoning effort keeps the
+ * budget for the actual rows.
+ */
+const MAX_OUTPUT_TOKENS = 32000;
 
 /** Minimal surface the provider needs; the real OpenAI client satisfies it. */
 export interface OpenAIResponsesClient {
@@ -73,6 +79,11 @@ export function createOpenAIProvider(deps: OpenAIProviderDeps = {}): ExtractionP
       instructions: spec.systemPrompt,
       input: [{ role: "user", content }],
       max_output_tokens: MAX_OUTPUT_TOKENS,
+      // Extraction is transcription, not reasoning; only reasoning-capable
+      // models accept the parameter.
+      ...(callModel.startsWith("gpt-5") || callModel.startsWith("o")
+        ? { reasoning: { effort: "low" as const } }
+        : {}),
       text: {
         format: {
           type: "json_schema",
@@ -86,8 +97,10 @@ export function createOpenAIProvider(deps: OpenAIProviderDeps = {}): ExtractionP
 
     const text = response.output_text;
     if (!text) {
+      const reason =
+        response.incomplete_details?.reason ?? response.status ?? "unknown";
       throw new Error(
-        `OpenAI returned no output text for ${spec.toolName} (status: ${response.status})`,
+        `OpenAI returned no output text for ${spec.toolName} (${reason})`,
       );
     }
     return spec.parse(JSON.parse(text));
