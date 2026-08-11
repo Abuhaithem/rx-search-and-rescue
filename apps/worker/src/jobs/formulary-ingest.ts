@@ -52,6 +52,11 @@ export async function runFormularyIngest(
       .delete(formularyLegends)
       .where(eq(formularyLegends.formularyId, job.formularyId));
 
+    // Merged PDFs can hold several formularies: an optional page window
+    // restricts this record's ingest to its own slice of the document.
+    const windowStart = Math.max(1, job.pageStart ?? 1);
+    const windowEnd = Math.min(textLayer.totalPages, job.pageEnd ?? textLayer.totalPages);
+
     let totalEntries = 0;
     let needsReviewCount = 0;
     let escalations = 0;
@@ -64,10 +69,10 @@ export async function runFormularyIngest(
       pending = [];
     };
 
-    for (let page = 1; page <= textLayer.totalPages; page++) {
+    for (let page = windowStart; page <= windowEnd; page++) {
       await updateJobProgress(db, job.ingestionJobId, {
         page,
-        totalPages: textLayer.totalPages,
+        totalPages: windowEnd,
         message: `Extracting page ${page} of ${textLayer.totalPages}${
           skippedPages > 0 ? ` (${skippedPages} skipped)` : ""
         }${escalations > 0 ? ` (${escalations} escalations)` : ""}`,
@@ -135,8 +140,8 @@ export async function runFormularyIngest(
       message: "Extracting abbreviation legend",
     });
     const legendSource = await pages.rangeBase64(
-      1,
-      Math.min(LEGEND_FRONT_MATTER_PAGES, pages.totalPages),
+      windowStart,
+      Math.min(windowStart + LEGEND_FRONT_MATTER_PAGES - 1, windowEnd),
     );
     const legend = await deps.extractor.extractFormularyLegend(legendSource);
     if (legend.entries.length > 0) {

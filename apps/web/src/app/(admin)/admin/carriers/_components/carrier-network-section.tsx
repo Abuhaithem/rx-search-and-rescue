@@ -27,6 +27,7 @@ import { Separator } from "@/components/ui/separator";
 import { toast } from "@/components/ui/sonner";
 import { attachCarrierDirectory, setCarrierPharmacyStatus } from "@/server/actions/admin";
 import type { NetworkStatus } from "@rxsr/core";
+import { fileTooLarge, MAX_PDF_BYTES } from "@/lib/file-limits";
 import type { DirectoryJobStatus, PharmacyZipRow } from "../../_lib/pharmacies";
 
 const STATUS_OPTIONS: { value: NetworkStatus; label: string }[] = [
@@ -201,6 +202,11 @@ function AttachDirectoryDialog({
     event.preventDefault();
     if (!file) {
       toast.error("Attach the pharmacy directory PDF");
+      return;
+    }
+    const sizeError = fileTooLarge(file, MAX_PDF_BYTES);
+    if (sizeError) {
+      toast.error(sizeError);
       return;
     }
     const formData = new FormData();

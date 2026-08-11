@@ -15,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/components/ui/sonner";
+import { fileTooLarge, MAX_XLSX_BYTES } from "@/lib/file-limits";
 
 interface WorkbookDialogProps {
   carrierId: string;
@@ -30,6 +31,11 @@ export function WorkbookDialog({ carrierId, carrierName, planYear }: WorkbookDia
   const submit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
+    const sizeError = fileTooLarge(formData.get("xlsx") as File | null, MAX_XLSX_BYTES);
+    if (sizeError) {
+      toast.error(sizeError);
+      return;
+    }
     startTransition(async () => {
       const result = await importCarrierWorkbook(carrierId, planYear, formData);
       if (!result.ok) {

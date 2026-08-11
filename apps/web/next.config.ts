@@ -41,8 +41,12 @@ const nextConfig: NextConfig = {
   transpilePackages: ["@rxsr/core", "@rxsr/db", "@rxsr/report"],
   experimental: {
     serverActions: {
-      bodySizeLimit: "25mb", // formulary PDFs upload through server actions
+      bodySizeLimit: "110mb", // formulary PDFs upload through server actions (100MB policy + form overhead)
     },
+    // Server-action POSTs traverse the auth middleware, which has its OWN
+    // body cap (default 10MB) — a larger upload gets truncated mid-stream
+    // ("Unexpected end of form"). Keep this in lockstep with bodySizeLimit.
+    middlewareClientMaxBodySize: 115343360, // 110MB
   },
 };
 

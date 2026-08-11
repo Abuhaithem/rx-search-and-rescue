@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/sonner";
 import { CarrierLogo } from "@/components/domain/carrier-logo";
+import { fileTooLarge, MAX_PDF_BYTES } from "@/lib/file-limits";
 
 interface CarrierOption {
   id: string;
@@ -49,6 +50,11 @@ export function StepUploadForm({
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
     formData.set("carrierId", carrierId);
+    const sizeError = fileTooLarge(formData.get("pdf") as File | null, MAX_PDF_BYTES);
+    if (sizeError) {
+      toast.error(sizeError);
+      return;
+    }
     startTransition(async () => {
       const result = await startFormularyWizard(formData);
       if (!result.ok) {
@@ -229,6 +235,11 @@ export function SobUploadForm({
   const submit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
+    const sizeError = fileTooLarge(formData.get("pdf") as File | null, MAX_PDF_BYTES);
+    if (sizeError) {
+      toast.error(sizeError);
+      return;
+    }
     startTransition(async () => {
       const result = await uploadSummaryOfBenefits(formularyId, [...selected], formData);
       if (!result.ok) {

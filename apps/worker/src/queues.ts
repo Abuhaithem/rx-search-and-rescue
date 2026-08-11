@@ -17,6 +17,12 @@ export interface FormularyIngestJob {
   formularyId: string;
   /** Object-storage key of the uploaded PDF. */
   storagePath: string;
+  /**
+   * 1-indexed inclusive page window for merged PDFs holding several
+   * formularies — each formulary record ingests only its own slice.
+   */
+  pageStart?: number;
+  pageEnd?: number;
 }
 
 export interface RxcIntakeJob {
