@@ -74,11 +74,17 @@ export function createOpenAIProvider(deps: OpenAIProviderDeps = {}): ExtractionP
     content: InputContent[],
     callModel: string,
   ): Promise<T> {
+    // gpt-5-family models REASON before answering, and reasoning tokens eat
+    // the same max_output_tokens budget — on dense pages the whole budget can
+    // burn with zero output ("status: incomplete"). Extraction is
+    // transcription, not reasoning: minimal effort frees the budget for rows.
+    const reasoningModel = /^gpt-5/.test(callModel);
     const response = await client.responses.create({
       model: callModel,
       instructions: spec.systemPrompt,
       input: [{ role: "user", content }],
       max_output_tokens: MAX_OUTPUT_TOKENS,
+      ...(reasoningModel ? { reasoning: { effort: "minimal" as const } } : {}),
       // Extraction is transcription, not reasoning; only reasoning-capable
       // models accept the parameter.
       ...(callModel.startsWith("gpt-5") || callModel.startsWith("o")
