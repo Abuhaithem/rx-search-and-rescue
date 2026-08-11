@@ -64,7 +64,7 @@ export default async function FormularyWizardPage({ searchParams }: WizardPagePr
           <CardContent className="p-6">
             <StepUploadForm
               carriers={carriers.map((c) => ({ id: c.id, name: c.name, logoUrl: c.logoUrl }))}
-              years={years}
+              years={[...new Set([year, ...years])].sort((a, b) => b - a)}
               defaultYear={year}
             />
           </CardContent>
