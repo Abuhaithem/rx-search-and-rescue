@@ -292,7 +292,10 @@ export async function loadComparisonInputs(analysisId: string): Promise<Comparis
       channel: tc.channel,
       tier: tc.tier,
       daysSupply: tc.daysSupply,
-      copayCents: tc.copayCents,
+      // Cap-only cells ("up to $35") price at the cap — the conservative
+      // worst case, same convention as the insulin rows.
+      copayCents:
+        tc.copayCents ?? (tc.coinsurancePct == null ? tc.maxCents : null),
       coinsurancePct: tc.coinsurancePct == null ? null : Number(tc.coinsurancePct),
     })),
     clientPharmacyStatus: statusForPrimary(ap.plan.id),

@@ -47,15 +47,17 @@ export function EditStagedCostDialog({
   const save = () => {
     const copayCents = dollarsToCents(copay);
     const coinsurancePct = coinsurance.trim() === "" ? null : Number(coinsurance);
-    if ((copayCents !== null) === (coinsurancePct !== null)) {
-      toast.error("Fill exactly one: a copay amount OR a coinsurance percentage");
+    const capCents = dollarsToCents(cap);
+    const capOnly = copayCents === null && coinsurancePct === null && capCents !== null;
+    if (!capOnly && (copayCents !== null) === (coinsurancePct !== null)) {
+      toast.error('Fill a copay, a coinsurance percentage, or only the cap ("up to $X")');
       return;
     }
     startTransition(async () => {
       const result = await updateStagedTierCost(cost.id, {
         copayCents,
         coinsurancePct,
-        maxCents: dollarsToCents(cap),
+        maxCents: capCents,
       });
       if (!result.ok) {
         toast.error(result.error);
@@ -133,8 +135,8 @@ export function EditStagedCostDialog({
               />
             </div>
             <p className="text-xs text-steel">
-              Fill exactly one of copay or coinsurance. If the document marks this cell N/A,
-              remove the row instead.
+              Fill a copay OR a coinsurance — or the cap alone when the document says just
+              &ldquo;up to $X&rdquo;. If the cell is N/A, remove the row instead.
             </p>
           </div>
           <DialogFooter className="flex items-center justify-between sm:justify-between">

@@ -38,6 +38,7 @@ function costLabel(cost: WizardStagedTierCost): string {
   if (cost.coinsurancePct !== null) {
     return `${cost.coinsurancePct}%${cost.maxCents !== null ? ` up to ${formatUsd(cost.maxCents)}` : ""}`;
   }
+  if (cost.maxCents !== null) return `up to ${formatUsd(cost.maxCents)}`;
   return "—";
 }
 

@@ -206,9 +206,12 @@ const stagedCostPatchSchema = z
     coinsurancePct: z.number().min(0).max(100).nullable(),
     maxCents: z.number().int().min(0).nullable(),
   })
-  .refine((p) => (p.copayCents !== null) !== (p.coinsurancePct !== null), {
-    message: "Set a copay OR a coinsurance percentage, not both",
-  });
+  .refine(
+    (p) =>
+      (p.copayCents !== null) !== (p.coinsurancePct !== null) ||
+      (p.copayCents === null && p.coinsurancePct === null && p.maxCents !== null),
+    { message: "Set a copay, a coinsurance percentage, or a per-fill cap alone (\"up to $X\")" },
+  );
 
 /** Step 4 — correct a staged cell in place; only staged rows are editable. */
 export async function updateStagedTierCost(
