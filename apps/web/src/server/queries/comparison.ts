@@ -508,10 +508,15 @@ export interface PharmacyOption {
   name: string;
   city: string | null;
   state: string | null;
+  zip: string | null;
+  /** Effective status per compared plan (override else carrier network). */
+  statusByPlan: Record<string, NetworkStatus | null>;
 }
 
 export interface ComparablePharmacies {
   options: PharmacyOption[];
+  /** Compared plans, in display order — the cards' status columns. */
+  plans: { id: string; name: string }[];
   selectedIds: string[];
   locked: boolean;
 }
@@ -527,23 +532,90 @@ export async function getComparablePharmacies(
   const db = getDb();
   const analysis = await db.query.analyses.findFirst({
     where: eq(analyses.id, analysisId),
-    columns: { status: true },
+    columns: { status: true, planYear: true },
     with: {
       client: { columns: { state: true } },
       pharmacies: { columns: { pharmacyId: true } },
+      plans: {
+        with: { plan: { columns: { id: true, name: true, carrierId: true } } },
+        orderBy: (ap, { asc }) => [asc(ap.position)],
+      },
     },
   });
   if (!analysis) return null;
 
   const state = analysis.client.state;
-  const options = await db.query.pharmacies.findMany({
+  const rows = await db.query.pharmacies.findMany({
     where: state ? eq(pharmacies.state, state) : undefined,
-    columns: { id: true, name: true, city: true, state: true },
+    columns: { id: true, name: true, city: true, state: true, zip: true },
     orderBy: (p, { asc }) => [asc(p.name)],
   });
 
+  // Effective status per option × compared plan: carrier network default,
+  // plan-level exception wins — same resolution the comparison itself uses.
+  const comparedPlans = analysis.plans.map((ap) => ({
+    id: ap.plan.id,
+    name: ap.plan.name,
+    carrierId: ap.plan.carrierId,
+  }));
+  const optionIds = rows.map((r) => r.id);
+  const statusByCarrierPharmacy = new Map<string, NetworkStatus>();
+  const overrideByPlanPharmacy = new Map<string, NetworkStatus>();
+  if (comparedPlans.length > 0 && optionIds.length > 0) {
+    const carrierRows = await db
+      .select({
+        carrierId: carrierPharmacyNetworks.carrierId,
+        pharmacyId: carrierPharmacyNetworks.pharmacyId,
+        status: carrierPharmacyNetworks.status,
+      })
+      .from(carrierPharmacyNetworks)
+      .where(
+        and(
+          eq(carrierPharmacyNetworks.staged, false),
+          eq(carrierPharmacyNetworks.planYear, analysis.planYear),
+          inArray(carrierPharmacyNetworks.carrierId, [
+            ...new Set(comparedPlans.map((p) => p.carrierId)),
+          ]),
+          inArray(carrierPharmacyNetworks.pharmacyId, optionIds),
+        ),
+      );
+    for (const row of carrierRows) {
+      statusByCarrierPharmacy.set(`${row.carrierId}:${row.pharmacyId}`, row.status);
+    }
+    const overrides = await db
+      .select({
+        planId: planPharmacyNetworks.planId,
+        pharmacyId: planPharmacyNetworks.pharmacyId,
+        status: planPharmacyNetworks.status,
+      })
+      .from(planPharmacyNetworks)
+      .where(
+        and(
+          eq(planPharmacyNetworks.staged, false),
+          inArray(planPharmacyNetworks.planId, comparedPlans.map((p) => p.id)),
+          inArray(planPharmacyNetworks.pharmacyId, optionIds),
+        ),
+      );
+    for (const row of overrides) {
+      overrideByPlanPharmacy.set(`${row.planId}:${row.pharmacyId}`, row.status);
+    }
+  }
+
+  const options: PharmacyOption[] = rows.map((row) => ({
+    ...row,
+    statusByPlan: Object.fromEntries(
+      comparedPlans.map((plan) => [
+        plan.id,
+        overrideByPlanPharmacy.get(`${plan.id}:${row.id}`) ??
+          statusByCarrierPharmacy.get(`${plan.carrierId}:${row.id}`) ??
+          null,
+      ]),
+    ),
+  }));
+
   return {
     options,
+    plans: comparedPlans.map((p) => ({ id: p.id, name: p.name })),
     selectedIds: analysis.pharmacies.map((p) => p.pharmacyId),
     locked: analysis.status === "approved" || analysis.status === "delivered",
   };

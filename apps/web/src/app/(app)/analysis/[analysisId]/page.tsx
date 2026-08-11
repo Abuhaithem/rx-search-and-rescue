@@ -13,8 +13,7 @@ import { RestrictionChip } from "@/components/domain/restriction-chip";
 import { CostMatrix } from "@/components/domain/cost-matrix";
 import { WorkflowNav } from "@/components/domain/workflow-nav";
 import { MailOrderToggle } from "./_components/mail-order-toggle";
-import { PharmacyNetworkCard } from "./_components/pharmacy-network-card";
-import { PharmacyPicker } from "./_components/pharmacy-picker";
+import { PharmacyCards } from "./_components/pharmacy-cards";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -79,8 +78,7 @@ export default async function ComparisonPage({
   if (!comparison) notFound();
   if (comparison.plans.length === 0) redirect(`/analysis/${analysisId}/plans`);
 
-  const { client, plans, grid, primaryPharmacy, pharmacyNetwork, costMatrix, analysis, entryProvenance } =
-    comparison;
+  const { client, plans, grid, primaryPharmacy, costMatrix, analysis, entryProvenance } = comparison;
 
   // Per-plan SoB tier label for tooltips; identity stays the numeric tier.
   const planTierLabel = (planId: string, tier: number): string | null => {
@@ -137,23 +135,15 @@ export default async function ComparisonPage({
         ))}
       </div>
 
-      <PharmacyNetworkCard pharmacies={pharmacyNetwork} plans={plans} />
+      {pharmacyChoices ? (
+        <PharmacyCards analysisId={analysisId} choices={pharmacyChoices} />
+      ) : null}
 
       <CostMatrix
         rows={costMatrix}
         plans={plans}
         controls={
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <MailOrderToggle analysisId={analysisId} checked={analysis.includeMailOrder} />
-            {pharmacyChoices ? (
-              <PharmacyPicker
-                analysisId={analysisId}
-                options={pharmacyChoices.options}
-                selectedIds={pharmacyChoices.selectedIds}
-                locked={pharmacyChoices.locked}
-              />
-            ) : null}
-          </div>
+          <MailOrderToggle analysisId={analysisId} checked={analysis.includeMailOrder} />
         }
       />
 

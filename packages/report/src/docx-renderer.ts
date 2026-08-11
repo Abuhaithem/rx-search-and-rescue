@@ -227,7 +227,7 @@ export function buildDocument(model: ReportModel): Document {
     new Paragraph({
       children: [
         bodyRun(
-          `Prepared by ${model.preparedBy} · ${model.agencyName} · Plan year ${model.planYear} · ${model.preparedDate}`,
+          `${model.agencyName} · Plan year ${model.planYear} · ${model.preparedDate}`,
           { size: 16, color: STEEL },
         ),
       ],

@@ -211,7 +211,7 @@ export function ReportEditor({ analysisId, clientId, model, status, pdfState, pd
                 </h2>
                 <p className="mt-0.5 text-xs text-steel">
                   {model.agencyName} · Plan year {model.planYear}
-                  {model.preparedBy ? ` · Prepared by ${model.preparedBy}` : ""}
+                  
                 </p>
               </div>
 
