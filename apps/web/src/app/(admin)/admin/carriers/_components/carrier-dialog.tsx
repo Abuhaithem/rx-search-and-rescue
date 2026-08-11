@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 import { Loader2 } from "lucide-react";
 import {
   createCarrier,
+  deleteCarrier,
   removeCarrierLogo,
   renameCarrier,
   uploadCarrierLogo,
@@ -58,6 +59,21 @@ export function CarrierDialog({ carrier, trigger }: CarrierDialogProps) {
       setOpen(false);
       if (!carrier) setName("");
       router.push(`/admin/carriers?carrier=${saved.data.carrierId}`);
+      router.refresh();
+    });
+  };
+
+  const removeCarrier = () => {
+    if (!carrier) return;
+    startTransition(async () => {
+      const result = await deleteCarrier(carrier.id);
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success("Carrier deleted");
+      setOpen(false);
+      router.push("/admin/carriers");
       router.refresh();
     });
   };
@@ -130,6 +146,16 @@ export function CarrierDialog({ carrier, trigger }: CarrierDialogProps) {
             {pending ? <Loader2 className="animate-spin" /> : null}
             {carrier ? "Save carrier" : "Create carrier"}
           </Button>
+          {carrier ? (
+            <button
+              type="button"
+              onClick={removeCarrier}
+              disabled={pending}
+              className="w-full text-center text-xs font-semibold text-notcovered hover:underline"
+            >
+              Delete this carrier (only possible while it has no plans or uploads)
+            </button>
+          ) : null}
         </form>
       </DialogContent>
     </Dialog>

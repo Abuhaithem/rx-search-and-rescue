@@ -2,7 +2,7 @@
 
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
-import { and, count, eq, inArray, ne } from "drizzle-orm";
+import { and, count, eq, inArray, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   carrierPharmacyNetworks,
@@ -366,6 +366,9 @@ export async function finalizeFormularyWizard(
           ),
         );
 
+      // Supersede only ORPHANED actives — same carrier+year documents that no
+      // plan points at anymore (i.e. this upload replaced them). Sibling
+      // plans' own formularies stay active: one formulary per plan.
       await tx
         .update(formularies)
         .set({ status: "superseded" })
@@ -375,6 +378,7 @@ export async function finalizeFormularyWizard(
             eq(formularies.planYear, formulary.planYear),
             eq(formularies.status, "active"),
             ne(formularies.id, formularyId),
+            sql`not exists (select 1 from ${plans} where ${plans.formularyId} = ${formularies.id})`,
           ),
         );
       await tx

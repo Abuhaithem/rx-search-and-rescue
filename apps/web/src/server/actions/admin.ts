@@ -124,6 +124,45 @@ export async function renameCarrier(
   }
 }
 
+/** Remove an empty carrier (duplicates, typos). Refuses if anything hangs off it. */
+export async function deleteCarrier(
+  carrierId: string,
+): Promise<ActionResult<{ carrierId: string }>> {
+  try {
+    const profile = await requireRole("admin", "manager");
+    uuidSchema.parse(carrierId);
+    const db = getDb();
+
+    const [carrier] = await db.select().from(carriers).where(eq(carriers.id, carrierId));
+    if (!carrier) return err("Carrier not found");
+    const [planCount] = await db
+      .select({ value: count() })
+      .from(plans)
+      .where(eq(plans.carrierId, carrierId));
+    const [formularyCount] = await db
+      .select({ value: count() })
+      .from(formularies)
+      .where(eq(formularies.carrierId, carrierId));
+    if ((planCount?.value ?? 0) > 0 || (formularyCount?.value ?? 0) > 0) {
+      return err("This carrier has plans or uploads — move or delete those first");
+    }
+
+    await db.delete(carriers).where(eq(carriers.id, carrierId));
+    await writeAudit(db, {
+      actorId: profile.id,
+      action: "carrier.deleted",
+      entityType: "carrier",
+      entityId: carrierId,
+      meta: { name: carrier.name },
+    });
+
+    revalidatePath("/", "layout");
+    return ok({ carrierId });
+  } catch (e) {
+    return err(errorMessage(e));
+  }
+}
+
 type Tx = Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0];
 
 async function resolveCarrierId(

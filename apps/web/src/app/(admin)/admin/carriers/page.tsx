@@ -172,10 +172,10 @@ export default async function CarriersPage({ searchParams }: CarriersPageProps) 
                     );
                     // Uploads mid-wizard (or active but plan-less) surface as
                     // resumable setups; finished ones are represented by their plans.
-                    const inSetup = selected.formularies.filter(
-                      (f) =>
-                        f.status !== "superseded" &&
-                        (f.status !== "active" || !linkedIds.has(f.id)),
+                    const inSetup = selected.formularies.filter((f) =>
+                      f.status === "active"
+                        ? !linkedIds.has(f.id)
+                        : f.status !== "superseded" || linkedIds.has(f.id),
                     );
 
                     if (selected.plans.length === 0 && inSetup.length === 0) {
