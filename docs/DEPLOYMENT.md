@@ -100,6 +100,22 @@ backward-compatible (new columns are nullable or defaulted), so old code
 runs against a newer schema. Return to `main` with `git checkout main`
 once fixed.
 
+## Login protection & password reset (optional features)
+
+Both are env-only switches — set the vars in `~/rx-search-and-rescue/.env`
+and `docker compose up -d` (no rebuild):
+
+- **Cloudflare Turnstile** (CAPTCHA on sign-in / forgot-password): create a
+  widget at dash.cloudflare.com → Turnstile for the site hostname, then set
+  `TURNSTILE_SITE_KEY` + `TURNSTILE_SECRET_KEY`. The DNS record can stay
+  "DNS only" — Turnstile does not require the Cloudflare proxy.
+- **Forgot-password emails** (AWS SES): verify a sender identity in SES
+  (same region as `AWS_REGION`), request production access (or verify each
+  recipient while sandboxed), attach `ses:SendEmail` to the EC2 instance
+  role, then set `SES_FROM_ADDRESS`. Links point at `https://SITE_ADDRESS`
+  unless `APP_BASE_URL` overrides it. A reset link works once, expires in
+  1 hour, and signs out every session for that user.
+
 ## User management
 
 ```bash

@@ -121,6 +121,25 @@ export const sessions = pgTable(
   (t) => [index("sessions_profile_idx").on(t.profileId)],
 );
 
+/**
+ * Single-use password-reset tokens. Like sessions, the email link carries the
+ * raw token and the DB only its SHA-256; used or expired rows are inert.
+ */
+export const passwordResetTokens = pgTable(
+  "password_reset_tokens",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    profileId: uuid("profile_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull().unique(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("password_reset_tokens_profile_idx").on(t.profileId)],
+);
+
 // ─── Reference data: carriers, formularies, plans ────────────────────────────
 
 export const carriers = pgTable("carriers", {
@@ -181,6 +200,8 @@ export const formularies = pgTable(
       indexCount?: number; // count from the document's own alphabetical index
       needsReview?: number;
       skippedPages?: number; // classifier-skipped non-table pages (no API call)
+      duplicatesSkipped?: number; // exact repeats collapsed at ingest
+      nameConflicts?: number; // names left with >1 row (tier/restriction disagreement)
       /** Plan names the extractor read off the document cover (wizard prefill). */
       extractedPlanNames?: string[];
     }>(),

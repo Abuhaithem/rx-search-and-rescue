@@ -1,32 +1,39 @@
 "use client";
 
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, MailCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/components/ui/sonner";
 import { TurnstileWidget } from "@/components/turnstile-widget";
-import { signIn } from "@/server/actions/auth";
+import { requestPasswordReset } from "@/server/actions/auth";
 
-export function LoginForm({ turnstileSiteKey }: { turnstileSiteKey: string | null }) {
-  const router = useRouter();
+export function ForgotPasswordForm({ turnstileSiteKey }: { turnstileSiteKey: string | null }) {
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
-  // Pass tokens are single-use: remount the widget after a failed submit.
   const [challengeAttempt, setChallengeAttempt] = useState(0);
+  const [sent, setSent] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   const turnstileBlocking = turnstileSiteKey !== null && turnstileToken === null;
 
+  if (sent) {
+    return (
+      <div className="flex items-start gap-3 rounded-card bg-fog px-4 py-3 text-sm text-deepwater">
+        <MailCheck className="mt-0.5 size-4 shrink-0 text-covered" />
+        <p>
+          If an account exists for <span className="font-semibold">{email}</span>, a reset link
+          is in its inbox. The link works once and expires in 1 hour.
+        </p>
+      </div>
+    );
+  }
+
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     startTransition(async () => {
-      const result = await signIn(email, password, turnstileToken ?? undefined);
+      const result = await requestPasswordReset(email, turnstileToken ?? undefined);
       if (!result.ok) {
         toast.error(result.error);
         if (turnstileSiteKey) {
@@ -35,33 +42,22 @@ export function LoginForm({ turnstileSiteKey }: { turnstileSiteKey: string | nul
         }
         return;
       }
-      router.push("/dashboard");
-      router.refresh();
+      setSent(true);
     });
   }
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor="login-email">Email</Label>
+        <Label htmlFor="forgot-email">Email</Label>
         <Input
-          id="login-email"
+          id="forgot-email"
           type="email"
           autoComplete="email"
           autoFocus
           required
           value={email}
           onChange={(event) => setEmail(event.target.value)}
-        />
-      </div>
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="login-password">Password</Label>
-        <PasswordInput
-          id="login-password"
-          autoComplete="current-password"
-          required
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
         />
       </div>
       {turnstileSiteKey ? (
@@ -71,23 +67,16 @@ export function LoginForm({ turnstileSiteKey }: { turnstileSiteKey: string | nul
           onToken={setTurnstileToken}
         />
       ) : null}
-      {/* Signing in doesn't complete the job — deepwater primary, never rescue. */}
       <Button type="submit" disabled={isPending || turnstileBlocking} className="mt-1 w-full">
         {isPending ? (
           <>
             <Loader2 className="animate-spin" />
-            Signing in…
+            Sending…
           </>
         ) : (
-          "Sign in"
+          "Email me a reset link"
         )}
       </Button>
-      <Link
-        href="/forgot-password"
-        className="text-center text-sm font-semibold text-steel hover:text-deepwater"
-      >
-        Forgot password?
-      </Link>
     </form>
   );
 }

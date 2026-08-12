@@ -2,7 +2,11 @@ import type { Metadata } from "next";
 import { LogoMark } from "@/components/brand/logo-mark";
 import { Card, CardContent } from "@/components/ui/card";
 import { Toaster } from "@/components/ui/sonner";
+import { turnstileSiteKey } from "@/server/turnstile";
 import { LoginForm } from "./_components/login-form";
+
+// Env-driven Turnstile key must be read per request, not baked at build.
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Sign in — Rx Search & Rescue",
@@ -32,7 +36,7 @@ export default function LoginPage() {
               Authorized agents only. Handles protected health information — access is logged.
             </p>
           </div>
-          <LoginForm />
+          <LoginForm turnstileSiteKey={turnstileSiteKey()} />
         </CardContent>
       </Card>
 
