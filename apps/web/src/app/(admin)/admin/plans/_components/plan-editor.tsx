@@ -11,6 +11,7 @@ import { Table, TBody, TCell, TH, THead, TRow } from "@/components/ui/table";
 import { upsertPlan, upsertTierCosts } from "@/server/actions/admin";
 import type { PlanUpsertInput, TierCostRowInput } from "@/server/schemas";
 import type { PlanCatalogRow } from "@/server/queries/plans";
+import { DeletePlanButton } from "./delete-plan-button";
 import { centsToDollarInput, parseDollarsToCents } from "./money";
 import { TierChecklist } from "./tier-checklist";
 
@@ -356,10 +357,11 @@ export function PlanEditor({ row }: { row: PlanCatalogRow }) {
           ) : null}
         </section>
 
-        <div>
+        <div className="flex items-center justify-between">
           <Button onClick={handleSave} disabled={isPending}>
             {isPending ? "Saving…" : "Save"}
           </Button>
+          <DeletePlanButton planId={plan.id} planName={plan.name} />
         </div>
       </CardContent>
     </Card>

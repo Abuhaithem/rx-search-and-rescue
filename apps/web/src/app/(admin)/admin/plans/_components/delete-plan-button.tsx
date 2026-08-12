@@ -4,30 +4,25 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { Trash2 } from "lucide-react";
 import { TypeToConfirmDeleteDialog } from "@/components/domain/type-to-confirm-delete-dialog";
-import { deleteFormulary } from "@/server/actions/admin";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/sonner";
+import { deletePlan } from "@/server/actions/admin";
 
-export function DeleteFormularyButton({
-  formularyId,
-  label,
-}: {
-  formularyId: string;
-  label: string;
-}) {
+export function DeletePlanButton({ planId, planName }: { planId: string; planName: string }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
   const remove = () => {
     startTransition(async () => {
-      const result = await deleteFormulary(formularyId);
+      const result = await deletePlan(planId);
       if (!result.ok) {
         toast.error(result.error);
         return;
       }
-      toast.success("Drug plan deleted");
+      toast.success("Plan deleted");
       setOpen(false);
+      router.push(`/admin/plans?year=${result.data.planYear}`);
       router.refresh();
     });
   };
@@ -37,26 +32,25 @@ export function DeleteFormularyButton({
       <Button
         type="button"
         variant="ghost"
-        size="sm"
-        aria-label={`Delete ${label}`}
-        className="text-notcovered hover:text-notcovered"
+        className="text-notcovered hover:bg-notcovered-soft hover:text-notcovered"
         onClick={() => setOpen(true)}
       >
         <Trash2 className="size-4" />
+        Delete plan
       </Button>
       <TypeToConfirmDeleteDialog
         open={open}
         onOpenChange={setOpen}
-        title="Delete this drug plan?"
-        confirmName={label}
+        title="Delete this plan?"
+        confirmName={planName}
         pending={pending}
         onConfirm={remove}
       >
         <p>
-          “{label}” will be deleted entirely: the extracted drug list, its linked plans with
-          their cost sharing, and the stored PDFs (formulary and Summaries of Benefits). If a
-          plan is already used in a client analysis, the delete is refused until those analyses
-          are removed. This cannot be undone.
+          “{planName}” disappears from the catalog along with its premium, deductible, tier cost
+          sharing, service areas, and its Summary of Benefits PDF (unless a sibling plan shares
+          the file). If the plan is used in a client analysis, the delete is refused. This cannot
+          be undone.
         </p>
       </TypeToConfirmDeleteDialog>
     </>

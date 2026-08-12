@@ -461,6 +461,66 @@ export async function deleteFormulary(
   }
 }
 
+/**
+ * Delete one plan: its tier costs, service areas, and network rows cascade;
+ * its Summary of Benefits leaves S3 unless another plan shares the file.
+ * Refused while the plan is cited by a client analysis.
+ */
+export async function deletePlan(
+  planId: string,
+): Promise<ActionResult<{ planId: string; planYear: number }>> {
+  try {
+    const profile = await requireRole("admin", "manager");
+    uuidSchema.parse(planId);
+
+    const db = getDb();
+    const plan = await db.query.plans.findFirst({ where: eq(plans.id, planId) });
+    if (!plan) return err("Plan not found");
+
+    const [inAnalyses] = await db
+      .select({ value: count() })
+      .from(analysisPlans)
+      .where(eq(analysisPlans.planId, planId));
+    const [inResults] = await db
+      .select({ value: count() })
+      .from(analysisResults)
+      .where(eq(analysisResults.planId, planId));
+    if ((inAnalyses?.value ?? 0) > 0 || (inResults?.value ?? 0) > 0) {
+      return err("This plan is used in client analyses — delete those analyses first");
+    }
+
+    await db.transaction(async (tx) => {
+      // In-force policy matches are soft links; the policy record stays.
+      await tx
+        .update(inForcePolicies)
+        .set({ matchedPlanId: null })
+        .where(eq(inForcePolicies.matchedPlanId, planId));
+      await tx.delete(plans).where(eq(plans.id, planId));
+      await writeAudit(tx, {
+        actorId: profile.id,
+        action: "plan.deleted",
+        entityType: "plan",
+        entityId: planId,
+        meta: { name: plan.name, planYear: plan.planYear },
+      });
+    });
+
+    // One SOB PDF can cover several sibling plans — only delete when orphaned.
+    if (plan.sobPath) {
+      const [sharing] = await db
+        .select({ value: count() })
+        .from(plans)
+        .where(eq(plans.sobPath, plan.sobPath));
+      if ((sharing?.value ?? 0) === 0) await deleteObject(plan.sobPath);
+    }
+
+    revalidatePath("/", "layout");
+    return ok({ planId, planYear: plan.planYear });
+  } catch (e) {
+    return err(errorMessage(e));
+  }
+}
+
 const bulkReviewSchema = z.object({
   action: z.enum(["accept", "remove"]),
   /** Omitted = every row still flagged for review on this formulary. */
