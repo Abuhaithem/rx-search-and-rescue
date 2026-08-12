@@ -21,7 +21,8 @@ export class AuthError extends Error {
 }
 
 export const SESSION_COOKIE = "rxsr_session";
-const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+// One workday: PHI on shared agency machines must not stay unlocked for weeks.
+const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
 
 // The cookie carries the raw token; the DB only ever sees its hash, so a DB
 // leak cannot be replayed as a session.

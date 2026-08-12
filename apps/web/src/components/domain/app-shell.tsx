@@ -1,16 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useTransition } from "react";
+import { Loader2, LogOut } from "lucide-react";
 import { LogoLockup } from "@/components/brand/logo-lockup";
+import { toast } from "@/components/ui/sonner";
 import { cn } from "@/lib/utils";
+import { signOut } from "@/server/actions/auth";
 
 /**
  * THE app header — one bar shared by every signed-in screen. Deepwater ink,
  * flat role-aware navigation (no sub-nav rows): agents see Dashboard, admins
  * additionally see Carriers and Plans. Active state derives from the path;
- * the avatar is the door to /settings. Content constrained to max-w-6xl per
- * the layout contract.
+ * the avatar is the door to /settings, sign-out sits beside it. Content
+ * constrained to max-w-6xl per the layout contract.
  */
 
 interface AppShellProps {
@@ -98,11 +102,42 @@ function AppShell({
             >
               {initials || "·"}
             </Link>
+            <SignOutButton />
           </div>
         </div>
       </header>
       <main className={cn("mx-auto w-full max-w-6xl flex-1 px-6 py-8", className)}>{children}</main>
     </div>
+  );
+}
+
+function SignOutButton() {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+
+  function handleSignOut() {
+    startTransition(async () => {
+      const result = await signOut();
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      router.push("/login");
+      router.refresh();
+    });
+  }
+
+  return (
+    <button
+      type="button"
+      aria-label="Sign out"
+      title="Sign out"
+      disabled={isPending}
+      onClick={handleSignOut}
+      className="flex size-9 items-center justify-center rounded-full text-white/65 ring-1 ring-inset ring-white/15 transition-colors hover:bg-harbor/60 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 disabled:opacity-60"
+    >
+      {isPending ? <Loader2 className="size-4 animate-spin" /> : <LogOut className="size-4" />}
+    </button>
   );
 }
 
