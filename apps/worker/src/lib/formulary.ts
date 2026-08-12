@@ -27,6 +27,34 @@ export function normalizeDrugName(raw: string): string {
   return raw.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
+export interface EntrySignatureInput {
+  normalizedName: string;
+  tier: number;
+  pa: boolean;
+  st: boolean;
+  qlQuantity: number | null;
+  qlDays: number | null;
+  extraFlags: string[];
+}
+
+/**
+ * Identity of an extracted row for cross-page dedup. Formularies repeat a
+ * drug under every therapeutic category it belongs to; the same name with
+ * the same tier and restrictions is one coverage fact, not several rows.
+ * Flag order is not meaningful, so extraFlags are sorted.
+ */
+export function entrySignature(entry: EntrySignatureInput): string {
+  return [
+    entry.normalizedName,
+    entry.tier,
+    entry.pa ? "pa" : "",
+    entry.st ? "st" : "",
+    entry.qlQuantity ?? "",
+    entry.qlDays ?? "",
+    [...entry.extraFlags].sort().join("+"),
+  ].join("|");
+}
+
 const unitOf = (segment: string): string | null => {
   const m = segment.match(UNIT_PART_RE);
   return m ? m[0] : null;

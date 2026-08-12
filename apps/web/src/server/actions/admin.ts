@@ -1,20 +1,23 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, count, eq, ne } from "drizzle-orm";
+import { and, count, eq, inArray, ne } from "drizzle-orm";
 import { z } from "zod";
 import {
+  analysisPlans,
+  analysisResults,
   carrierPharmacyNetworks,
   carriers,
   formularies,
   formularyEntries,
   getDb,
+  inForcePolicies,
   planServiceAreas,
   planTierCosts,
   plans,
 } from "@rxsr/db";
 import type { NetworkStatus } from "@rxsr/core";
-import { uploadObject } from "../storage";
+import { deleteObject, uploadObject } from "../storage";
 import { err, errorMessage, ok, type ActionResult } from "../action-result";
 import { requireRole } from "../auth";
 import { writeAudit } from "../audit";
@@ -379,8 +382,11 @@ export async function addFormularyEntry(
 }
 
 /**
- * Remove a formulary that never went live (failed extraction, abandoned
- * setup). Active formularies must be superseded by a new upload instead.
+ * Delete a drug plan wholesale: the formulary (entries and legends cascade),
+ * its linked plans (tier costs, service areas, network rows cascade), and the
+ * stored PDFs (formulary source + Summaries of Benefits) in S3. Refused only
+ * when a linked plan is cited by a client analysis — analyses must be deleted
+ * first so results never point at a missing plan.
  */
 export async function deleteFormulary(
   formularyId: string,
@@ -394,29 +400,111 @@ export async function deleteFormulary(
       where: eq(formularies.id, formularyId),
     });
     if (!formulary) return err("Formulary not found");
-    if (formulary.status === "active") {
-      return err("This formulary is live — upload a replacement to supersede it instead");
+
+    const linkedPlans = await db
+      .select({ id: plans.id, sobPath: plans.sobPath })
+      .from(plans)
+      .where(eq(plans.formularyId, formularyId));
+    const planIds = linkedPlans.map((p) => p.id);
+
+    if (planIds.length > 0) {
+      const [inAnalyses] = await db
+        .select({ value: count() })
+        .from(analysisPlans)
+        .where(inArray(analysisPlans.planId, planIds));
+      const [inResults] = await db
+        .select({ value: count() })
+        .from(analysisResults)
+        .where(inArray(analysisResults.planId, planIds));
+      if ((inAnalyses?.value ?? 0) > 0 || (inResults?.value ?? 0) > 0) {
+        return err(
+          "Plans from this upload are used in client analyses — delete those analyses first",
+        );
+      }
     }
 
     await db.transaction(async (tx) => {
-      // Plans that pointed at it lose the link but keep their pricing.
-      await tx
-        .update(plans)
-        .set({ formularyId: null })
-        .where(eq(plans.formularyId, formularyId));
-      // Entries and legends cascade with the row.
+      if (planIds.length > 0) {
+        // In-force policy matches are soft links; the policy record stays.
+        await tx
+          .update(inForcePolicies)
+          .set({ matchedPlanId: null })
+          .where(inArray(inForcePolicies.matchedPlanId, planIds));
+        await tx.delete(plans).where(inArray(plans.id, planIds));
+      }
       await tx.delete(formularies).where(eq(formularies.id, formularyId));
       await writeAudit(tx, {
         actorId: profile.id,
         action: "formulary.deleted",
         entityType: "formulary",
         entityId: formularyId,
-        meta: { label: formulary.label, status: formulary.status },
+        meta: {
+          label: formulary.label,
+          status: formulary.status,
+          planCount: planIds.length,
+        },
       });
     });
 
+    // After the commit, best-effort S3 cleanup (deleteObject never throws).
+    const objectKeys = new Set(
+      [formulary.sourceFilePath, ...linkedPlans.map((p) => p.sobPath)].filter(
+        (key): key is string => key !== null && key !== undefined,
+      ),
+    );
+    await Promise.all([...objectKeys].map((key) => deleteObject(key)));
+
     revalidatePath("/", "layout");
     return ok({ formularyId });
+  } catch (e) {
+    return err(errorMessage(e));
+  }
+}
+
+const bulkReviewSchema = z.object({
+  action: z.enum(["accept", "remove"]),
+  /** Omitted = every row still flagged for review on this formulary. */
+  entryIds: z.array(uuidSchema).min(1).max(5000).optional(),
+});
+export type BulkReviewInput = z.infer<typeof bulkReviewSchema>;
+
+export async function bulkResolveReviewRows(
+  formularyId: string,
+  decision: BulkReviewInput,
+): Promise<ActionResult<{ count: number }>> {
+  try {
+    const profile = await requireRole("admin", "manager");
+    uuidSchema.parse(formularyId);
+    const input = bulkReviewSchema.parse(decision);
+
+    const db = getDb();
+    const scope = and(
+      eq(formularyEntries.formularyId, formularyId),
+      eq(formularyEntries.needsReview, true),
+      ...(input.entryIds ? [inArray(formularyEntries.id, input.entryIds)] : []),
+    );
+
+    const resolvedCount = await db.transaction(async (tx) => {
+      const rows =
+        input.action === "remove"
+          ? await tx.delete(formularyEntries).where(scope).returning({ id: formularyEntries.id })
+          : await tx
+              .update(formularyEntries)
+              .set({ needsReview: false, reviewedBy: profile.id })
+              .where(scope)
+              .returning({ id: formularyEntries.id });
+      await writeAudit(tx, {
+        actorId: profile.id,
+        action: "formulary.review_bulk_resolved",
+        entityType: "formulary",
+        entityId: formularyId,
+        meta: { decision: input.action, count: rows.length },
+      });
+      return rows.length;
+    });
+
+    revalidatePath("/", "layout");
+    return ok({ count: resolvedCount });
   } catch (e) {
     return err(errorMessage(e));
   }

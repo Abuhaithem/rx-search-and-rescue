@@ -1,7 +1,9 @@
 /**
  * Formulary ingest: per-page vision extraction (provider-pluggable)
  * cross-checked against the PDF text layer, deterministic restriction
- * parsing, multi-strength expansion, and batch insert.
+ * parsing, multi-strength expansion, cross-page dedup (exact repeats are
+ * collapsed; same-name disagreements are flagged for review), and batch
+ * insert.
  * Each extraction call receives a single-page sub-PDF; index/front-matter
  * pages are skipped up front by the deterministic text-layer classifier
  * (lib/page-classify) so no API call is spent on them. Pages that fail the
@@ -9,7 +11,16 @@
  * in needs_review. Ends at status "qa" — an admin must resolve review rows
  * and activate.
  */
-import { eq, formularies, formularyEntries, formularyLegends } from "@rxsr/db";
+import {
+  and,
+  eq,
+  formularies,
+  formularyEntries,
+  formularyLegends,
+  inArray,
+  isNotNull,
+  sql,
+} from "@rxsr/db";
 import { parseRestrictions } from "@rxsr/core/formulary";
 import type { FormularyIngestJob } from "../queues";
 import {
@@ -18,7 +29,7 @@ import {
   OK_CONFIDENCE,
 } from "../lib/cross-check";
 import { markJobDone, markJobFailed, markJobRunning, updateJobProgress } from "../lib/db";
-import { expandStrengths, isBrandName } from "../lib/formulary";
+import { entrySignature, expandStrengths, isBrandName } from "../lib/formulary";
 import { classifyFormularyPage } from "../lib/page-classify";
 import { createPageExtractor } from "../lib/pdf-chunk";
 import { createJobDeps, type JobDeps } from "./deps";
@@ -61,6 +72,8 @@ export async function runFormularyIngest(
     let needsReviewCount = 0;
     let escalations = 0;
     let skippedPages = 0;
+    let duplicatesSkipped = 0;
+    const seenSignatures = new Set<string>();
     let pending: (typeof formularyEntries.$inferInsert)[] = [];
 
     const flush = async () => {
@@ -108,6 +121,20 @@ export async function runFormularyIngest(
       for (const row of extracted.rows) {
         const restrictions = parseRestrictions(row.requirementsText);
         for (const normalizedName of expandStrengths(row.rawDrugName)) {
+          const signature = entrySignature({
+            normalizedName,
+            tier: row.tier,
+            pa: restrictions.pa,
+            st: restrictions.st,
+            qlQuantity: restrictions.ql?.quantity ?? null,
+            qlDays: restrictions.ql?.days ?? null,
+            extraFlags: restrictions.extraFlags,
+          });
+          if (seenSignatures.has(signature)) {
+            duplicatesSkipped += 1;
+            continue;
+          }
+          seenSignatures.add(signature);
           pending.push({
             formularyId: job.formularyId,
             rawDrugName: row.rawDrugName,
@@ -133,6 +160,46 @@ export async function runFormularyIngest(
       if (pending.length >= INSERT_BATCH_SIZE) await flush();
     }
     await flush();
+
+    // Exact repeats were collapsed above, so a name that still appears more
+    // than once carries a real disagreement (different tier or restrictions)
+    // the extractor cannot adjudicate — every copy goes to human review.
+    const conflictedNames = (
+      await db
+        .select({ normalizedName: formularyEntries.normalizedName })
+        .from(formularyEntries)
+        .where(
+          and(
+            eq(formularyEntries.formularyId, job.formularyId),
+            isNotNull(formularyEntries.normalizedName),
+          ),
+        )
+        .groupBy(formularyEntries.normalizedName)
+        .having(sql`count(*) > 1`)
+    )
+      .map((row) => row.normalizedName)
+      .filter((name): name is string => name !== null);
+    if (conflictedNames.length > 0) {
+      await db
+        .update(formularyEntries)
+        .set({ needsReview: true })
+        .where(
+          and(
+            eq(formularyEntries.formularyId, job.formularyId),
+            inArray(formularyEntries.normalizedName, conflictedNames),
+          ),
+        );
+      const [reviewCount] = await db
+        .select({ value: sql<number>`count(*)::int` })
+        .from(formularyEntries)
+        .where(
+          and(
+            eq(formularyEntries.formularyId, job.formularyId),
+            eq(formularyEntries.needsReview, true),
+          ),
+        );
+      needsReviewCount = reviewCount?.value ?? needsReviewCount;
+    }
 
     await updateJobProgress(db, job.ingestionJobId, {
       page: textLayer.totalPages,
@@ -167,6 +234,8 @@ export async function runFormularyIngest(
           totalEntries,
           needsReview: needsReviewCount,
           skippedPages,
+          duplicatesSkipped,
+          nameConflicts: conflictedNames.length,
           extractedPlanNames,
         },
         status: "qa",
@@ -176,7 +245,7 @@ export async function runFormularyIngest(
     await markJobDone(db, job.ingestionJobId, {
       page: textLayer.totalPages,
       totalPages: textLayer.totalPages,
-      message: `Extracted ${totalEntries} entries (${needsReviewCount} need review, ${escalations} pages escalated, ${skippedPages} non-table pages skipped)`,
+      message: `Extracted ${totalEntries} entries (${needsReviewCount} need review, ${duplicatesSkipped} duplicate rows collapsed, ${escalations} pages escalated, ${skippedPages} non-table pages skipped)`,
     });
   } catch (error) {
     await markJobFailed(db, job.ingestionJobId, error);

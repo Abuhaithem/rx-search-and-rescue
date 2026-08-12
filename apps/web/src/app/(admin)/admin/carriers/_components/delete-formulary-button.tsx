@@ -32,7 +32,7 @@ export function DeleteFormularyButton({
         toast.error(result.error);
         return;
       }
-      toast.success("Upload removed");
+      toast.success("Drug plan deleted");
       setOpen(false);
       router.refresh();
     });
@@ -53,12 +53,13 @@ export function DeleteFormularyButton({
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Remove this upload?</DialogTitle>
+            <DialogTitle>Delete this drug plan?</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-steel">
-            “{label}” and its extracted drug rows will be deleted. Plans that referenced it keep
-            their pricing but lose the drug list until a new formulary is uploaded. This cannot
-            be undone.
+            “{label}” will be deleted entirely: the extracted drug list, its linked plans with
+            their cost sharing, and the stored PDFs (formulary and Summaries of Benefits). If a
+            plan is already used in a client analysis, the delete is refused until those analyses
+            are removed. This cannot be undone.
           </p>
           <DialogFooter>
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>

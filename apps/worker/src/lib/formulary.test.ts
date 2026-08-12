@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { expandStrengths, isBrandName, normalizeDrugName } from "./formulary";
+import { entrySignature, expandStrengths, isBrandName, normalizeDrugName } from "./formulary";
 
 describe("isBrandName", () => {
   it("treats fully uppercase rows as brand", () => {
@@ -77,5 +77,44 @@ describe("expandStrengths", () => {
       "alecensa 150 mg",
       "alecensa 300 mg",
     ]);
+  });
+});
+
+describe("entrySignature", () => {
+  const base = {
+    normalizedName: "atorvastatin oral tablet 10 mg",
+    tier: 2,
+    pa: false,
+    st: false,
+    qlQuantity: null,
+    qlDays: null,
+    extraFlags: [] as string[],
+  };
+
+  it("matches when the same drug repeats under another category", () => {
+    expect(entrySignature(base)).toBe(entrySignature({ ...base }));
+  });
+
+  it("ignores extra-flag order", () => {
+    expect(entrySignature({ ...base, extraFlags: ["NM", "B/D PA"] })).toBe(
+      entrySignature({ ...base, extraFlags: ["B/D PA", "NM"] }),
+    );
+  });
+
+  it("differs when the tier differs", () => {
+    expect(entrySignature(base)).not.toBe(entrySignature({ ...base, tier: 3 }));
+  });
+
+  it("differs when restrictions differ", () => {
+    expect(entrySignature(base)).not.toBe(entrySignature({ ...base, pa: true }));
+    expect(entrySignature(base)).not.toBe(
+      entrySignature({ ...base, qlQuantity: 60, qlDays: 30 }),
+    );
+  });
+
+  it("does not collide across field boundaries", () => {
+    expect(entrySignature({ ...base, qlQuantity: 60, qlDays: null })).not.toBe(
+      entrySignature({ ...base, qlQuantity: null, qlDays: 60 }),
+    );
   });
 });

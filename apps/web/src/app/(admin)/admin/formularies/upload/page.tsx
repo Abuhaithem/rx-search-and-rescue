@@ -193,7 +193,9 @@ export default async function FormularyWizardPage({ searchParams }: WizardPagePr
                 </CardContent>
               </Card>
 
-              {reviewRows.length > 0 ? <ReviewTable rows={reviewRows} /> : null}
+              {reviewRows.length > 0 ? (
+                <ReviewTable formularyId={formulary.id} rows={reviewRows} />
+              ) : null}
 
               <Card>
                 <CardContent className="p-6">
