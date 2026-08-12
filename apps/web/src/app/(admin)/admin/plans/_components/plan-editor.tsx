@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
@@ -192,9 +193,23 @@ export function PlanEditor({ row }: { row: PlanCatalogRow }) {
     });
   }
 
+  const inSetup = row.formularyStatus === "ingesting" || row.formularyStatus === "qa";
+
   return (
     <Card>
       <CardContent className="space-y-6 p-5">
+        {inSetup ? (
+          <p className="rounded-card bg-restricted-soft px-4 py-3 text-sm text-restricted">
+            <span className="font-semibold">Still in setup.</span> This plan&apos;s formulary
+            wizard was never finalized, so agents can&apos;t see or select it yet.{" "}
+            <Link
+              href={`/admin/formularies/upload?formulary=${plan.formularyId}&step=2`}
+              className="font-semibold underline"
+            >
+              Resume setup →
+            </Link>
+          </p>
+        ) : null}
         <div className="space-y-1">
           <h2 className="font-display text-lg font-extrabold leading-tight text-deepwater">
             {plan.name}

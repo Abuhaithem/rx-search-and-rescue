@@ -59,15 +59,24 @@ export async function getAvailablePlans(clientId: string, planYear: number): Pro
       .where(eq(zipCounties.zip, client.zip));
   }
 
-  const planRows = await db.query.plans.findMany({
-    where: and(eq(plans.planYear, planYear), eq(plans.curated, true)),
-    with: {
-      carrier: true,
-      formulary: true,
-      tierCosts: { where: (t, { eq: eqOp }) => eqOp(t.staged, false) },
-      serviceAreas: true,
-    },
-  });
+  const planRows = (
+    await db.query.plans.findMany({
+      where: and(eq(plans.planYear, planYear), eq(plans.curated, true)),
+      with: {
+        carrier: true,
+        formulary: true,
+        tierCosts: { where: (t, { eq: eqOp }) => eqOp(t.staged, false) },
+        serviceAreas: true,
+      },
+    })
+  ).filter(
+    // Wizard staging never reaches agents: a plan whose formulary is still
+    // ingesting/qa doesn't exist yet as far as plan selection is concerned.
+    (plan) =>
+      !plan.formulary ||
+      plan.formulary.status === "active" ||
+      plan.formulary.status === "superseded",
+  );
 
   const inArea = planRows.filter((plan) => {
     if (plan.serviceAreas.length === 0 || counties.length === 0) return true; // incomplete data: don't hide

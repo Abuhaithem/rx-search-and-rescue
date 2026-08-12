@@ -75,7 +75,14 @@ export default async function PlanCatalogPage({ searchParams }: PageProps) {
                       )}
                     >
                       <span className="truncate">{row.plan.name}</span>
-                      {row.tierCostsComplete ? (
+                      {row.formularyStatus === "ingesting" || row.formularyStatus === "qa" ? (
+                        <span
+                          className="inline-flex shrink-0 items-center rounded-chip bg-restricted-soft px-1.5 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-[0.08em] text-restricted"
+                          title="Wizard not finalized — agents can't see this plan yet"
+                        >
+                          In setup
+                        </span>
+                      ) : row.tierCostsComplete ? (
                         <span
                           className="inline-flex shrink-0 items-center rounded-chip bg-covered-soft px-1.5 py-0.5 text-covered"
                           title="Tier costs complete"

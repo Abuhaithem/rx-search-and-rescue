@@ -177,8 +177,14 @@ export default async function CarriersPage({ searchParams }: CarriersPageProps) 
                         ? !linkedIds.has(f.id)
                         : f.status !== "superseded" || linkedIds.has(f.id),
                     );
+                    // A plan whose formulary hasn't been finalized is wizard
+                    // staging — its setup row above is its only representation.
+                    const livePlans = selected.plans.filter((p) => {
+                      const f = p.formularyId ? formularyById.get(p.formularyId) : undefined;
+                      return !f || f.status === "active" || f.status === "superseded";
+                    });
 
-                    if (selected.plans.length === 0 && inSetup.length === 0) {
+                    if (livePlans.length === 0 && inSetup.length === 0) {
                       return (
                         <p className="text-sm text-steel">
                           No drug plans yet. A plan is created from its two documents — upload
@@ -230,7 +236,7 @@ export default async function CarriersPage({ searchParams }: CarriersPageProps) 
                           </li>
                         ))}
 
-                        {selected.plans.map((plan) => {
+                        {livePlans.map((plan) => {
                           const formulary = plan.formularyId
                             ? formularyById.get(plan.formularyId)
                             : undefined;
