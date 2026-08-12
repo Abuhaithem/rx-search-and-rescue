@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
+import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -32,37 +33,23 @@ const CHANNEL_LABEL: Record<Channel, string> = {
 };
 
 interface GridRow {
+  /** Stable identity for cell values while channel/days are being edited. */
+  id: number;
   channel: Channel;
-  daysSupply: number;
+  /** Fill length in days as typed — validated on save. */
+  days: string;
 }
 
-const rowKey = (row: GridRow) => `${row.channel}|${row.daysSupply}`;
-const rowLabel = (row: GridRow) => `${CHANNEL_LABEL[row.channel]} — ${row.daysSupply} day`;
+const rowTitle = (row: GridRow) =>
+  `${CHANNEL_LABEL[row.channel]} — ${row.days.trim() === "" ? "?" : row.days.trim()} day`;
 
 /** Documents vary: 30/90 is common but 60- and 100-day supplies exist too. */
-const DEFAULT_ROWS: GridRow[] = [
-  { channel: "preferred_retail", daysSupply: 30 },
-  { channel: "standard_retail", daysSupply: 30 },
-  { channel: "preferred_mail", daysSupply: 90 },
-  { channel: "standard_mail", daysSupply: 90 },
+const DEFAULT_ROWS: Omit<GridRow, "id">[] = [
+  { channel: "preferred_retail", days: "30" },
+  { channel: "standard_retail", days: "30" },
+  { channel: "preferred_mail", days: "90" },
+  { channel: "standard_mail", days: "90" },
 ];
-
-const sortRows = (rows: GridRow[]): GridRow[] =>
-  [...rows].sort((a, b) =>
-    a.channel === b.channel
-      ? a.daysSupply - b.daysSupply
-      : CHANNEL_ORDER.indexOf(a.channel) - CHANNEL_ORDER.indexOf(b.channel),
-  );
-
-/** Grid rows come from the pricing on file; the classic four seed empty plans. */
-function rowsFromCatalog(tierCosts: PlanCatalogRow["tierCosts"]): GridRow[] {
-  const seen = new Map<string, GridRow>();
-  for (const tc of tierCosts) {
-    const row = { channel: tc.channel as Channel, daysSupply: tc.daysSupply };
-    seen.set(rowKey(row), row);
-  }
-  return seen.size > 0 ? sortRows([...seen.values()]) : DEFAULT_ROWS;
-}
 
 const TIERS = [
   { tier: "t1", label: "T1" },
@@ -74,19 +61,39 @@ const TIERS = [
   { tier: "insulin", label: "Insulin" },
 ] as const;
 
-/** Existing DB rows → editable grid values ("$10", "50%"), keyed "channel|tier". */
-function gridFromCatalog(tierCosts: PlanCatalogRow["tierCosts"]): Record<string, string> {
-  const grid: Record<string, string> = {};
-  for (const tc of tierCosts) {
+/** Pricing on file → editable rows + cell values keyed by row id and tier. */
+function buildGridState(tierCosts: PlanCatalogRow["tierCosts"]): {
+  rows: GridRow[];
+  values: Record<string, string>;
+} {
+  const sorted = [...tierCosts].sort((a, b) =>
+    a.channel === b.channel
+      ? a.daysSupply - b.daysSupply
+      : CHANNEL_ORDER.indexOf(a.channel as Channel) - CHANNEL_ORDER.indexOf(b.channel as Channel),
+  );
+  const rowIdByCombo = new Map<string, number>();
+  const rows: GridRow[] = [];
+  const values: Record<string, string> = {};
+  for (const tc of sorted) {
+    const combo = `${tc.channel}|${tc.daysSupply}`;
+    let id = rowIdByCombo.get(combo);
+    if (id === undefined) {
+      id = rows.length;
+      rowIdByCombo.set(combo, id);
+      rows.push({ id, channel: tc.channel as Channel, days: String(tc.daysSupply) });
+    }
     const display =
       tc.copayCents != null
         ? `$${centsToDollarInput(tc.copayCents)}`
         : tc.coinsurancePct != null
           ? `${tc.coinsurancePct % 1 === 0 ? tc.coinsurancePct.toFixed(0) : tc.coinsurancePct}%`
           : "";
-    if (display) grid[`${tc.channel}|${tc.daysSupply}|${tc.tier}`] = display;
+    if (display) values[`${id}|${tc.tier}`] = display;
   }
-  return grid;
+  if (rows.length === 0) {
+    return { rows: DEFAULT_ROWS.map((row, id) => ({ ...row, id })), values: {} };
+  }
+  return { rows, values };
 }
 
 type CellParse =
@@ -115,12 +122,10 @@ export function PlanEditor({ row }: { row: PlanCatalogRow }) {
   const [premium, setPremium] = useState(centsToDollarInput(plan.premiumCents));
   const [deductible, setDeductible] = useState(centsToDollarInput(plan.rxDeductibleCents));
   const [deductibleTiers, setDeductibleTiers] = useState<number[]>(plan.deductibleTiers);
-  const [grid, setGrid] = useState<Record<string, string>>(() =>
-    gridFromCatalog(row.tierCosts),
-  );
-  const [gridRows, setGridRows] = useState<GridRow[]>(() => rowsFromCatalog(row.tierCosts));
-  const [newChannel, setNewChannel] = useState<Channel>("preferred_retail");
-  const [newDays, setNewDays] = useState("");
+  const [initialGrid] = useState(() => buildGridState(row.tierCosts));
+  const [grid, setGrid] = useState<Record<string, string>>(initialGrid.values);
+  const [gridRows, setGridRows] = useState<GridRow[]>(initialGrid.rows);
+  const [nextRowId, setNextRowId] = useState(initialGrid.rows.length);
   // Display labels only — tier identity stays t1..t6/insulin.
   const [tierLabels, setTierLabels] = useState<Record<string, string>>(() => ({
     ...plan.tierLabels,
@@ -136,13 +141,29 @@ export function PlanEditor({ row }: { row: PlanCatalogRow }) {
     }
 
     const tierCostRows: TierCostRowInput[] = [];
+    const seenCombos = new Set<string>();
     for (const gridRow of gridRows) {
+      const days = Number((gridRow.days.match(/\d+/) ?? [])[0]);
+      if (!Number.isInteger(days) || days < 1 || days > 365) {
+        toast.error(
+          `The ${CHANNEL_LABEL[gridRow.channel]} row needs a days supply — e.g. 30, 60, 90, 100`,
+        );
+        return;
+      }
+      const combo = `${gridRow.channel}|${days}`;
+      if (seenCombos.has(combo)) {
+        toast.error(
+          `${CHANNEL_LABEL[gridRow.channel]} — ${days} day appears twice — merge those rows`,
+        );
+        return;
+      }
+      seenCombos.add(combo);
       for (const tier of TIERS) {
-        const raw = grid[`${rowKey(gridRow)}|${tier.tier}`] ?? "";
+        const raw = grid[`${gridRow.id}|${tier.tier}`] ?? "";
         const parsed = parseCell(raw);
         if (parsed === "invalid") {
           toast.error(
-            `Can't read "${raw.trim()}" for ${rowLabel(gridRow)}, ${tier.label} — use "$10", "$47.50", or "50%"`,
+            `Can't read "${raw.trim()}" for ${rowTitle(gridRow)}, ${tier.label} — use "$10", "$47.50", or "50%"`,
           );
           return;
         }
@@ -150,7 +171,7 @@ export function PlanEditor({ row }: { row: PlanCatalogRow }) {
         tierCostRows.push({
           channel: gridRow.channel,
           tier: tier.tier,
-          daysSupply: gridRow.daysSupply,
+          daysSupply: days,
           copayCents: parsed.copayCents,
           coinsurancePct: parsed.coinsurancePct,
         });
@@ -292,14 +313,63 @@ export function PlanEditor({ row }: { row: PlanCatalogRow }) {
               </THead>
               <TBody>
                 {gridRows.map((gridRow) => (
-                  <TRow key={rowKey(gridRow)} className="hover:bg-transparent">
-                    <TCell className="whitespace-nowrap font-semibold">{rowLabel(gridRow)}</TCell>
+                  <TRow key={gridRow.id} className="hover:bg-transparent">
+                    <TCell className="whitespace-nowrap">
+                      <div className="flex items-center gap-1.5">
+                        <select
+                          aria-label="Pharmacy channel"
+                          className="h-8 rounded-md border border-mist bg-white px-2 text-sm font-semibold"
+                          value={gridRow.channel}
+                          onChange={(event) =>
+                            setGridRows((previous) =>
+                              previous.map((r) =>
+                                r.id === gridRow.id
+                                  ? { ...r, channel: event.target.value as Channel }
+                                  : r,
+                              ),
+                            )
+                          }
+                        >
+                          {CHANNEL_ORDER.map((channel) => (
+                            <option key={channel} value={channel}>
+                              {CHANNEL_LABEL[channel]}
+                            </option>
+                          ))}
+                        </select>
+                        <Input
+                          aria-label={`Days supply for ${CHANNEL_LABEL[gridRow.channel]}`}
+                          inputMode="numeric"
+                          placeholder="30"
+                          className="text-data h-8 w-14 px-2 text-[13px]"
+                          value={gridRow.days}
+                          onChange={(event) =>
+                            setGridRows((previous) =>
+                              previous.map((r) =>
+                                r.id === gridRow.id ? { ...r, days: event.target.value } : r,
+                              ),
+                            )
+                          }
+                        />
+                        <span className="text-xs text-steel">day</span>
+                        <button
+                          type="button"
+                          aria-label={`Remove ${rowTitle(gridRow)} row`}
+                          title="Remove row"
+                          className="ml-1 rounded-md p-1 text-steel transition-colors hover:bg-notcovered-soft hover:text-notcovered"
+                          onClick={() =>
+                            setGridRows((previous) => previous.filter((r) => r.id !== gridRow.id))
+                          }
+                        >
+                          <X className="size-3.5" />
+                        </button>
+                      </div>
+                    </TCell>
                     {TIERS.map((tier) => {
-                      const key = `${rowKey(gridRow)}|${tier.tier}`;
+                      const key = `${gridRow.id}|${tier.tier}`;
                       return (
                         <TCell key={key} className="px-1.5 py-1.5">
                           <Input
-                            aria-label={`${rowLabel(gridRow)}, ${tier.label}`}
+                            aria-label={`${rowTitle(gridRow)}, ${tier.label}`}
                             placeholder="—"
                             className="text-data h-8 w-16 px-2 text-[13px]"
                             value={grid[key] ?? ""}
@@ -315,54 +385,27 @@ export function PlanEditor({ row }: { row: PlanCatalogRow }) {
               </TBody>
             </Table>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <select
-              aria-label="Channel for new pricing row"
-              className="h-8 rounded-md border border-mist bg-white px-2 text-sm"
-              value={newChannel}
-              onChange={(event) => setNewChannel(event.target.value as Channel)}
-            >
-              {CHANNEL_ORDER.map((channel) => (
-                <option key={channel} value={channel}>
-                  {CHANNEL_LABEL[channel]}
-                </option>
-              ))}
-            </select>
-            <Input
-              aria-label="Days supply for new pricing row"
-              inputMode="numeric"
-              placeholder="days, e.g. 60"
-              className="text-data h-8 w-28"
-              value={newDays}
-              onChange={(event) => setNewDays(event.target.value)}
-            />
+          <div>
             <Button
               type="button"
               variant="secondary"
               size="sm"
               onClick={() => {
-                const days = Number((newDays.match(/\d+/) ?? [])[0]);
-                if (!Number.isInteger(days) || days < 1 || days > 365) {
-                  toast.error("Days supply is the fill length — e.g. 30, 60, 90, 100");
-                  return;
-                }
-                const candidate: GridRow = { channel: newChannel, daysSupply: days };
-                if (gridRows.some((r) => rowKey(r) === rowKey(candidate))) {
-                  toast.error(`${rowLabel(candidate)} is already in the grid`);
-                  return;
-                }
-                setGridRows((previous) => sortRows([...previous, candidate]));
-                setNewDays("");
+                setGridRows((previous) => [
+                  ...previous,
+                  { id: nextRowId, channel: "preferred_retail", days: "" },
+                ]);
+                setNextRowId((n) => n + 1);
               }}
             >
               Add pricing row
             </Button>
           </div>
           <p className="text-xs text-steel">
-            Enter &quot;$10&quot;, &quot;$47.50&quot;, or &quot;50%&quot; per cell — leave a cell
-            blank for no pricing row. Supplies aren&apos;t fixed to 30/90 days — add a row for
-            whatever fill length the Summary of Benefits prices (60-day, 100-day…). Typed by a
-            person on purpose: these are the dollar figures clients see.
+            Each row is a channel and its fill length — type the days right in the table
+            (30, 60, 90, 100…). Enter &quot;$10&quot;, &quot;$47.50&quot;, or &quot;50%&quot; per
+            cell; leave a cell blank for no pricing row. Typed by a person on purpose: these are
+            the dollar figures clients see.
           </p>
           {row.tierCostCount > 0 ? (
             <p className="text-xs text-steel">
