@@ -47,6 +47,32 @@ export function parseRestrictions(raw: string | null | undefined): ParsedRestric
   return out;
 }
 
+/**
+ * Parser for QL-appendix prose ("Covered drugs with a quantity limit"
+ * charts — UHC-style formularies keep amounts out of the main table):
+ *   "Maximum of 2 tablets per day"
+ *   "Maximum of 1 syringe (2.4 ml) per 56 days"
+ *   "1 vaccination dose (0.5 ml) per day"
+ * Conservative: only whole-number quantities parse; anything else returns
+ * null and the verbatim text remains the only record.
+ */
+const QL_TEXT_RE =
+  /(?:maximum\s+of\s+)?(?<![\d.])(\d[\d,]*)(?!\.\d)\s+[a-z][a-z\s./-]*?(?:\([^)]*\)\s*)?per\s+(?:(\d+)\s+)?days?\b/i;
+
+export function parseQuantityLimitText(
+  raw: string | null | undefined,
+): { quantity: number; days: number } | null {
+  if (!raw) return null;
+  const m = raw.trim().match(QL_TEXT_RE);
+  if (!m) return null;
+  const quantity = Number(m[1]!.replace(/,/g, ""));
+  const days = m[2] === undefined ? 1 : Number(m[2]);
+  if (!Number.isInteger(quantity) || quantity < 1 || !Number.isInteger(days) || days < 1) {
+    return null;
+  }
+  return { quantity, days };
+}
+
 /** Render back to the canonical display string used in provenance popovers. */
 export function formatRestrictions(r: ParsedRestrictions): string {
   const parts: string[] = [];

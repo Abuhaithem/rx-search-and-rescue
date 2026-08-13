@@ -4,7 +4,12 @@
  * verbatim from formulary PDFs.
  */
 import { describe, expect, it } from "vitest";
-import { formatRestrictions, parseRestrictions, type ParsedRestrictions } from "./restrictions";
+import {
+  formatRestrictions,
+  parseQuantityLimitText,
+  parseRestrictions,
+  type ParsedRestrictions,
+} from "./restrictions";
 
 const EMPTY: ParsedRestrictions = { pa: false, st: false, ql: null, extraFlags: [] };
 
@@ -222,5 +227,53 @@ describe("formatRestrictions — round-trips of canonical strings", () => {
     expect(formatRestrictions(parseRestrictions("NEDS; QL (60 per 30 days); ST; PA"))).toBe(
       "PA; ST; QL (60 per 30 days); NEDS",
     );
+  });
+});
+
+describe("parseQuantityLimitText", () => {
+  it("parses the plain per-day form", () => {
+    expect(parseQuantityLimitText("Maximum of 2 tablets per day")).toEqual({
+      quantity: 2,
+      days: 1,
+    });
+    expect(parseQuantityLimitText("Maximum of 32 ml per day")).toEqual({
+      quantity: 32,
+      days: 1,
+    });
+  });
+
+  it("parses multi-day periods", () => {
+    expect(parseQuantityLimitText("Maximum of 1 syringe (2.4 ml) per 56 days")).toEqual({
+      quantity: 1,
+      days: 56,
+    });
+    expect(parseQuantityLimitText("Maximum of 8 tablets per 28 days")).toEqual({
+      quantity: 8,
+      days: 28,
+    });
+  });
+
+  it("parses without the Maximum-of prefix", () => {
+    expect(parseQuantityLimitText("1 vaccination dose (0.5 ml) per day")).toEqual({
+      quantity: 1,
+      days: 1,
+    });
+  });
+
+  it("parses comma-thousands quantities", () => {
+    expect(parseQuantityLimitText("Maximum of 1,800 ml per 30 days")).toEqual({
+      quantity: 1800,
+      days: 30,
+    });
+  });
+
+  it("refuses fractional quantities rather than rounding", () => {
+    expect(parseQuantityLimitText("Maximum of 1.5 tablets per day")).toBeNull();
+  });
+
+  it("returns null for prose without a limit", () => {
+    expect(parseQuantityLimitText("Talk with your doctor or pharmacist")).toBeNull();
+    expect(parseQuantityLimitText("")).toBeNull();
+    expect(parseQuantityLimitText(null)).toBeNull();
   });
 });

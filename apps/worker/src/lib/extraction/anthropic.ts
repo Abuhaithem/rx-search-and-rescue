@@ -15,6 +15,8 @@ import {
   formularyPageUserText,
   formularyPlanNamesSpec,
   pharmacyDirectorySpec,
+  quantityLimitPageSpec,
+  quantityLimitPageUserText,
   rxcExtractionSpec,
   sobExtractionSpec,
 } from "./schemas";
@@ -122,6 +124,19 @@ export function createAnthropicProvider(
         [
           pdfBlock(pdfBase64OrChunk, false),
           { type: "text", text: formularyPageUserText(pageNumber) },
+        ],
+        options?.model ?? model,
+        true,
+      );
+      return forcePageNumber(page, pageNumber);
+    },
+
+    async extractQuantityLimitPage(pdfBase64OrChunk, pageNumber, options) {
+      const page = await run(
+        quantityLimitPageSpec,
+        [
+          pdfBlock(pdfBase64OrChunk, false),
+          { type: "text", text: quantityLimitPageUserText(pageNumber) },
         ],
         options?.model ?? model,
         true,

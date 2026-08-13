@@ -13,6 +13,8 @@ import {
   formularyPageUserText,
   formularyPlanNamesSpec,
   pharmacyDirectorySpec,
+  quantityLimitPageSpec,
+  quantityLimitPageUserText,
   rxcExtractionSpec,
   sobExtractionSpec,
 } from "./schemas";
@@ -132,6 +134,18 @@ export function createOpenAIProvider(deps: OpenAIProviderDeps = {}): ExtractionP
         [
           pdfContent(pdfBase64OrChunk),
           { type: "input_text", text: formularyPageUserText(pageNumber) },
+        ],
+        options?.model ?? model,
+      );
+      return forcePageNumber(page, pageNumber);
+    },
+
+    async extractQuantityLimitPage(pdfBase64OrChunk, pageNumber, options) {
+      const page = await run(
+        quantityLimitPageSpec,
+        [
+          pdfContent(pdfBase64OrChunk),
+          { type: "input_text", text: quantityLimitPageUserText(pageNumber) },
         ],
         options?.model ?? model,
       );

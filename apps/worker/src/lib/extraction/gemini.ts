@@ -16,6 +16,8 @@ import {
   formularyLegendSpec,
   formularyPageSpec,
   formularyPageUserText,
+  quantityLimitPageSpec,
+  quantityLimitPageUserText,
   formularyPlanNamesSpec,
   pharmacyDirectorySpec,
   rxcExtractionSpec,
@@ -104,6 +106,15 @@ export function createGeminiProvider(deps: GeminiProviderDeps = {}): ExtractionP
       const page = await run(
         formularyPageSpec,
         [pdfPart(pdfBase64OrChunk), { text: formularyPageUserText(pageNumber) }],
+        options?.model ?? model,
+      );
+      return forcePageNumber(page, pageNumber);
+    },
+
+    async extractQuantityLimitPage(pdfBase64OrChunk, pageNumber, options) {
+      const page = await run(
+        quantityLimitPageSpec,
+        [pdfPart(pdfBase64OrChunk), { text: quantityLimitPageUserText(pageNumber) }],
         options?.model ?? model,
       );
       return forcePageNumber(page, pageNumber);

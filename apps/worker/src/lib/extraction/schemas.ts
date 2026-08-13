@@ -54,6 +54,19 @@ export const pharmacyDirectoryExtractionSchema = z.object({
 });
 export type PharmacyDirectoryExtraction = z.infer<typeof pharmacyDirectoryExtractionSchema>;
 
+export const quantityLimitPageSchema = z.object({
+  page: z.number().int().min(1),
+  rows: z.array(
+    z.object({
+      /** Drug name verbatim, casing preserved (bold/UPPERCASE = brand). */
+      rawDrugName: z.string().min(1),
+      /** Limit column verbatim, e.g. "Maximum of 2 tablets per day". */
+      quantityLimitText: z.string().min(1),
+    }),
+  ),
+});
+export type QuantityLimitPageExtraction = z.infer<typeof quantityLimitPageSchema>;
+
 export const formularyPlanNamesSchema = z.object({
   /** Exact plan names this formulary document says it applies to. */
   planNames: z.array(z.string().min(1)).max(20),
@@ -224,6 +237,36 @@ const FORMULARY_PAGE_JSON_SCHEMA: JsonObjectSchema = {
           therapeuticCategory: {
             type: ["string", "null"],
             description: "Group heading the row appears under, e.g. ANTINEOPLASTICS.",
+          },
+        },
+      },
+    },
+  },
+};
+
+const QL_PAGE_JSON_SCHEMA: JsonObjectSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["page", "rows"],
+  properties: {
+    page: { type: "integer", minimum: 1 },
+    rows: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["rawDrugName", "quantityLimitText"],
+        properties: {
+          rawDrugName: {
+            type: "string",
+            minLength: 1,
+            description: "Drug name column verbatim, casing preserved.",
+          },
+          quantityLimitText: {
+            type: "string",
+            minLength: 1,
+            description:
+              'Quantity limit column verbatim, e.g. "Maximum of 2 tablets per day".',
           },
         },
       },
@@ -407,6 +450,23 @@ Rules:
   parse: (input) => formularyPageSchema.parse(input),
 };
 
+/**
+ * QL-appendix chart ("Covered drugs with a quantity limit") — a supplement
+ * with NO tier column; its rows must never become formulary entries.
+ */
+export const quantityLimitPageSpec: ExtractionSpec<QuantityLimitPageExtraction> = {
+  toolName: "record_quantity_limit_page",
+  description: "Record the quantity-limit rows extracted from one QL-chart page.",
+  systemPrompt: `You extract rows from the "Covered drugs with a quantity limit (QL)" chart of a Medicare formulary PDF. Its columns are: drug name, brand/generic indicator, and the quantity limit.
+Rules:
+- Extract ONLY rows from the requested page. If the page is not part of the quantity-limit chart, return an empty rows array.
+- Copy the drug name verbatim including casing, strength, and dosage-form parentheticals, exactly as printed.
+- Copy the quantity limit column verbatim, e.g. "Maximum of 2 tablets per day", "Maximum of 1 syringe (2.4 ml) per 56 days".
+- A row split across columns or pages belongs to the page where its drug name starts.`,
+  jsonSchema: QL_PAGE_JSON_SCHEMA,
+  parse: (input) => quantityLimitPageSchema.parse(input),
+};
+
 export const formularyLegendSpec: ExtractionSpec<FormularyLegendExtraction> = {
   toolName: "record_formulary_legend",
   description: "Record the formulary's abbreviation legend entries.",
@@ -463,9 +523,12 @@ Emit each channel + daysSupply combination AT MOST ONCE per tier. When a documen
 export const formularyPageUserText = (pageNumber: number): string =>
   `Extract the drug rows of page ${pageNumber} (1-indexed by the PDF page order of the provided document, not the printed page number). Set "page" to ${pageNumber}.`;
 
+export const quantityLimitPageUserText = (pageNumber: number): string =>
+  `Extract the quantity-limit rows of page ${pageNumber} (1-indexed by the PDF page order of the provided document, not the printed page number). Set "page" to ${pageNumber}.`;
+
 /**
  * Models occasionally echo the printed page number; provenance must point at
  * the page that was requested.
  */
-export const forcePageNumber = (page: FormularyPage, requested: number): FormularyPage =>
+export const forcePageNumber = <T extends { page: number }>(page: T, requested: number): T =>
   page.page === requested ? page : { ...page, page: requested };

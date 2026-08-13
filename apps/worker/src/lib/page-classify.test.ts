@@ -94,3 +94,62 @@ describe("classifyFormularyPage", () => {
     expect(classifyFormularyPage(page)).toBe("extract");
   });
 });
+
+describe("quantity-limit appendix pages", () => {
+  const QL_CHART_PAGE = `Covered drugs with a quantity limit (QL)
+This list shows drugs that have a quantity limit. Some drugs come in several strengths.
+Drug name
+Abacavir Sulfate (Oral Solution)
+Abacavir Sulfate (Oral Tablet)
+Abiraterone Acetate (250MG Oral Tablet)
+Brand
+or
+Generic
+G
+G
+G
+Quantity limit
+Maximum of 32 ml per day
+Maximum of 2 tablets per day
+Maximum of 4 tablets per day`;
+
+  const QL_CHART_CONTINUATION = `Drug name
+Acarbose (100MG Oral Tablet)
+Acarbose (25MG Oral Tablet)
+Adacel (Intramuscular Suspension)
+Quantity limit
+Maximum of 3 tablets per day
+Maximum of 12 tablets per day
+Maximum of 1 syringe (0.5 ml) per day`;
+
+  it("classifies the QL chart's first page by header plus limit rows", () => {
+    expect(classifyFormularyPage(QL_CHART_PAGE)).toBe("quantity-limit");
+  });
+
+  it("classifies headerless continuation pages by limit-row density", () => {
+    expect(classifyFormularyPage(QL_CHART_CONTINUATION)).toBe("quantity-limit");
+  });
+
+  it("keeps main-table pages with a tier column as extract", () => {
+    const withTier = `Drug name Drug tier Requirements
+celecoxib 2 Maximum of 4 tablets per day
+diclofenac 2 Maximum of 2 tablets per day
+ibuprofen 1 Maximum of 9 tablets per day`;
+    expect(classifyFormularyPage(withTier)).toBe("extract");
+  });
+
+  it("does not route the table of contents to QL extraction", () => {
+    const toc = `Table of contents
+What is the UnitedHealthcare Drug List? ............................ 4
+Covered drugs by category ................................... 29
+Covered drugs with a quantity limit (QL) ................ 88
+Frequently asked questions .................................. 6
+How to read the drug list ....................................... 9
+Drug index ................................................................ 12
+Vaccines .................................................................. 119
+Requirements and limits ....................................... 10`;
+    // Conservative fallback keeps it "extract" (empty-row call); the point
+    // is that mentioning the section title never routes it to QL extraction.
+    expect(classifyFormularyPage(toc)).not.toBe("quantity-limit");
+  });
+});

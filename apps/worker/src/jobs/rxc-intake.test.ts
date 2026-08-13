@@ -111,6 +111,9 @@ function fakeProvider(): { provider: ExtractionProvider; calls: string[] } {
     async extractFormularyPage() {
       throw new Error("not used");
     },
+    async extractQuantityLimitPage() {
+      throw new Error("not used");
+    },
     async extractFormularyLegend() {
       throw new Error("not used");
     },

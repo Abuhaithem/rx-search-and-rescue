@@ -202,6 +202,8 @@ export const formularies = pgTable(
       skippedPages?: number; // classifier-skipped non-table pages (no API call)
       duplicatesSkipped?: number; // exact repeats collapsed at ingest
       nameConflicts?: number; // names left with >1 row (tier/restriction disagreement)
+      qlApplied?: number; // QL-appendix limits merged into entries by name
+      qlUnapplied?: number; // QL-appendix rows unparseable or matching no entry
       /** Plan names the extractor read off the document cover (wizard prefill). */
       extractedPlanNames?: string[];
     }>(),

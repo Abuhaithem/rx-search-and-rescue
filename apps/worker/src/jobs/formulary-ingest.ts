@@ -19,9 +19,10 @@ import {
   formularyLegends,
   inArray,
   isNotNull,
+  isNull,
   sql,
 } from "@rxsr/db";
-import { parseRestrictions } from "@rxsr/core/formulary";
+import { parseQuantityLimitText, parseRestrictions } from "@rxsr/core/formulary";
 import type { FormularyIngestJob } from "../queues";
 import {
   crossCheckFormularyPage,
@@ -74,6 +75,9 @@ export async function runFormularyIngest(
     let skippedPages = 0;
     let duplicatesSkipped = 0;
     const seenSignatures = new Set<string>();
+    // QL-appendix rows (charts with no tier column) supplement existing
+    // entries by name — they never become entries themselves.
+    const quantityLimitRows: { rawDrugName: string; quantityLimitText: string }[] = [];
     let pending: (typeof formularyEntries.$inferInsert)[] = [];
 
     const flush = async () => {
@@ -92,8 +96,15 @@ export async function runFormularyIngest(
       });
 
       const pageText = textLayer.pages[page - 1] ?? "";
-      if (classifyFormularyPage(pageText) === "skip") {
+      const pageClass = classifyFormularyPage(pageText);
+      if (pageClass === "skip") {
         skippedPages += 1;
+        continue;
+      }
+      if (pageClass === "quantity-limit") {
+        const qlBase64 = await pages.pageBase64(page);
+        const qlExtracted = await deps.extractor.extractQuantityLimitPage(qlBase64, 1);
+        quantityLimitRows.push(...qlExtracted.rows);
         continue;
       }
 
@@ -201,6 +212,41 @@ export async function runFormularyIngest(
       needsReviewCount = reviewCount?.value ?? needsReviewCount;
     }
 
+    // Merge the QL appendix into the entries it names. Never overwrites a
+    // limit the main table already stated; unmatched or unparseable rows are
+    // counted, not guessed at.
+    let qlApplied = 0;
+    let qlUnapplied = 0;
+    if (quantityLimitRows.length > 0) {
+      await updateJobProgress(db, job.ingestionJobId, {
+        message: `Applying ${quantityLimitRows.length} quantity-limit rows`,
+      });
+      for (const qlRow of quantityLimitRows) {
+        const parsed = parseQuantityLimitText(qlRow.quantityLimitText);
+        if (!parsed) {
+          qlUnapplied += 1;
+          continue;
+        }
+        let matched = 0;
+        for (const normalizedName of expandStrengths(qlRow.rawDrugName)) {
+          const updated = await db
+            .update(formularyEntries)
+            .set({ qlQuantity: parsed.quantity, qlDays: parsed.days })
+            .where(
+              and(
+                eq(formularyEntries.formularyId, job.formularyId),
+                eq(formularyEntries.normalizedName, normalizedName),
+                isNull(formularyEntries.qlQuantity),
+              ),
+            )
+            .returning({ id: formularyEntries.id });
+          matched += updated.length;
+        }
+        if (matched === 0) qlUnapplied += 1;
+        else qlApplied += matched;
+      }
+    }
+
     await updateJobProgress(db, job.ingestionJobId, {
       page: textLayer.totalPages,
       totalPages: textLayer.totalPages,
@@ -236,6 +282,8 @@ export async function runFormularyIngest(
           skippedPages,
           duplicatesSkipped,
           nameConflicts: conflictedNames.length,
+          qlApplied,
+          qlUnapplied,
           extractedPlanNames,
         },
         status: "qa",
@@ -245,7 +293,7 @@ export async function runFormularyIngest(
     await markJobDone(db, job.ingestionJobId, {
       page: textLayer.totalPages,
       totalPages: textLayer.totalPages,
-      message: `Extracted ${totalEntries} entries (${needsReviewCount} need review, ${duplicatesSkipped} duplicate rows collapsed, ${escalations} pages escalated, ${skippedPages} non-table pages skipped)`,
+      message: `Extracted ${totalEntries} entries (${needsReviewCount} need review, ${duplicatesSkipped} duplicate rows collapsed, ${qlApplied} quantity limits merged from the QL chart, ${escalations} pages escalated, ${skippedPages} non-table pages skipped)`,
     });
   } catch (error) {
     await markJobFailed(db, job.ingestionJobId, error);

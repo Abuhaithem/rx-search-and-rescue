@@ -8,10 +8,20 @@
  * page with no usable text layer) is extracted.
  */
 
-export type PageClass = "extract" | "skip";
+export type PageClass = "extract" | "skip" | "quantity-limit";
 
 const TABLE_HEADER =
   /drug\s*name|drug\s*tier|requirements?\s*\/?\s*limits|covered\s+drugs/i;
+
+/**
+ * QL-appendix chart (UHC-style): "Covered drugs with a quantity limit"
+ * lists name + limit prose ("Maximum of 2 tablets per day") and has NO tier
+ * column. Extracting it as a formulary table would force invented tiers and
+ * duplicate every listed drug — it is a supplement, keyed by drug name.
+ */
+const QL_SECTION_HEADER = /covered\s+drugs\s+with\s+a\s+quantity\s+limit/i;
+const QL_ROW = /\bmaximum\s+of\s+\d/gi;
+const TIER_COLUMN = /\b(?:drug\s+)?tier\b/i;
 
 /** QL (120 per 30 days), PA, ST, B/D — restriction notation only tables use. */
 const RESTRICTION = /\b(?:QL|PA|ST|B\/D|NM|LA)\s*\(|\b(?:PA|ST);/;
@@ -26,6 +36,16 @@ export function classifyFormularyPage(pageText: string): PageClass {
   const text = pageText.trim();
   // No text layer (scanned/image page) — cannot judge, must extract.
   if (text.length < 40) return "extract";
+
+  // Must run before TABLE_HEADER: the QL chart's own header contains
+  // "Covered drugs". A tier column anywhere means it IS the main table, and
+  // the TOC mentions the section header with no limit rows — so limit rows,
+  // not the header, are what identifies the chart.
+  if (!TIER_COLUMN.test(text)) {
+    const qlRows = text.match(QL_ROW)?.length ?? 0;
+    if (qlRows >= 3) return "quantity-limit";
+    if (QL_SECTION_HEADER.test(text) && qlRows >= 1) return "quantity-limit";
+  }
 
   if (TABLE_HEADER.test(text)) return "extract";
   if (RESTRICTION.test(text)) return "extract";

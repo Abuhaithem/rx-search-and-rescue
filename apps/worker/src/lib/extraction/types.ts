@@ -8,6 +8,7 @@ import type {
   FormularyLegendExtraction,
   FormularyPlanNamesExtraction,
   PharmacyDirectoryExtraction,
+  QuantityLimitPageExtraction,
   SobExtraction,
 } from "./schemas";
 
@@ -38,6 +39,12 @@ export interface ExtractionProvider {
     pageNumber: number,
     options?: ExtractionCallOptions,
   ): Promise<FormularyPage>;
+  /** QL-appendix chart page (no tier column) — supplement, not entries. */
+  extractQuantityLimitPage(
+    pdfBase64OrChunk: string,
+    pageNumber: number,
+    options?: ExtractionCallOptions,
+  ): Promise<QuantityLimitPageExtraction>;
   extractFormularyLegend(
     pdfBase64: string,
     options?: ExtractionCallOptions,
