@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { Loader2, Plus, TriangleAlert, X } from "lucide-react";
-import type { PolicyType } from "@rxsr/core";
+import { LIS_CATEGORIES, LIS_CATEGORY_LABELS, type LisCategory, type PolicyType } from "@rxsr/core";
 import { confirmIntake, retryRxcExtraction } from "@/server/actions/intake";
 import type { ConfirmIntakeInput } from "@/server/schemas";
 import { Button } from "@/components/ui/button";
@@ -80,6 +80,8 @@ export interface IntakeReviewProps {
     takesPrescriptions: boolean | null;
     deliveryPreferred: boolean | null;
     mailOrderInterest: string | null;
+    /** CMS dual/LIS category; null = not LIS / unknown. */
+    lisCategory: LisCategory | null;
   };
   medications: IntakeMedication[];
   pharmacies: IntakePharmacy[];
@@ -111,6 +113,7 @@ export function IntakeReview(props: IntakeReviewProps) {
   const [mailOrderInterest, setMailOrderInterest] = useState(
     props.client.mailOrderInterest === "yes" ? "yes" : "no",
   );
+  const [lisCategory, setLisCategory] = useState<string>(props.client.lisCategory ?? "none");
   const [planYear, setPlanYear] = useState(props.defaultPlanYear);
   const [currentPolicyId, setCurrentPolicyId] = useState<string>(
     props.policies.find((p) => p.isCurrentDrugPlan)?.id ?? "none",
@@ -216,6 +219,8 @@ export function IntakeReview(props: IntakeReviewProps) {
         county: county.trim() || null,
         takesPrescriptions: props.client.takesPrescriptions,
         deliveryPreferred: props.client.deliveryPreferred,
+        lisCategory:
+          lisCategory === "none" ? null : (lisCategory as LisCategory),
         mailOrderInterest:
           mailOrderInterest === "yes" || mailOrderInterest === "no"
             ? mailOrderInterest
@@ -412,6 +417,22 @@ export function IntakeReview(props: IntakeReviewProps) {
                     <SelectContent>
                       <SelectItem value="yes">Yes</SelectItem>
                       <SelectItem value="no">No</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-steel">Medicaid / Extra Help (LIS)</Label>
+                  <Select value={lisCategory} onValueChange={setLisCategory}>
+                    <SelectTrigger className="w-64">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Not LIS / unknown</SelectItem>
+                      {LIS_CATEGORIES.map((category) => (
+                        <SelectItem key={category} value={category}>
+                          {LIS_CATEGORY_LABELS[category]}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>

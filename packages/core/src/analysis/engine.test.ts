@@ -597,3 +597,99 @@ describe("token canonicalization — RxC dosage text vs formulary spelling", () 
     expect(match?.needsConfirmation).toBe(true);
   });
 });
+
+// ── LIS (D-SNP) pricing ─────────────────────────────────────────────────────
+
+describe("LIS cost sharing (D-SNP plans)", () => {
+  const lisPlan: EnginePlan = {
+    id: "plan-dsnp",
+    name: "Dual Complete ID-Q1",
+    premiumCents: 0,
+    rxDeductibleCents: 0,
+    deductibleTiers: [],
+    entries: [
+      entry({ id: "e-generic", normalizedName: "losartan 50 mg", tier: 2, isBrand: false }),
+      entry({ id: "e-brand", rawDrugName: "ELIQUIS", normalizedName: "eliquis 5 mg", tier: 3, isBrand: true }),
+    ],
+    tierCosts: [],
+    clientPharmacyStatus: "standard",
+    lisCostSharing: true,
+  };
+  const meds = [
+    med({ id: "m-generic", normalizedName: "losartan 50 mg" }),
+    med({ id: "m-brand", normalizedName: "eliquis 5 mg", genericOk: false }),
+  ];
+
+  it("prices generic and brand from the CMS schedule for the client's category", () => {
+    const output = runAnalysis(meds, [lisPlan], null, {
+      planYear: 2026,
+      category: "full_medicaid_le_100_fpl",
+    });
+    expect(cellOf(output.cells, "m-generic", "plan-dsnp").copayCents).toBe(160);
+    expect(cellOf(output.cells, "m-brand", "plan-dsnp").copayCents).toBe(490);
+    const summary = summaryOf(output, "plan-dsnp");
+    expect(summary.estMonthlyCents).toBe(650);
+    expect(summary.estMonthlyIsPartial).toBe(false);
+  });
+
+  it("institutionalized members pay zero", () => {
+    const output = runAnalysis(meds, [lisPlan], null, {
+      planYear: 2026,
+      category: "institutional_or_hcbs",
+    });
+    expect(cellOf(output.cells, "m-brand", "plan-dsnp").copayCents).toBe(0);
+    expect(summaryOf(output, "plan-dsnp").estMonthlyCents).toBe(0);
+  });
+
+  it("unknown category keeps coverage but drops dollars (partial)", () => {
+    const output = runAnalysis(meds, [lisPlan], null, { planYear: 2026, category: null });
+    const cell = cellOf(output.cells, "m-generic", "plan-dsnp");
+    expect(cell.coverage).toBe("covered");
+    expect(cell.copayCents).toBeNull();
+    expect(summaryOf(output, "plan-dsnp").estMonthlyIsPartial).toBe(true);
+  });
+
+  it("unlisted plan year yields no dollars rather than stale ones", () => {
+    const output = runAnalysis(meds, [lisPlan], null, {
+      planYear: 2031,
+      category: "full_medicaid_le_100_fpl",
+    });
+    expect(cellOf(output.cells, "m-generic", "plan-dsnp").copayCents).toBeNull();
+    expect(summaryOf(output, "plan-dsnp").estMonthlyIsPartial).toBe(true);
+  });
+
+  it("never uses tier costs for an LIS plan even when rows exist", () => {
+    const withTierCosts: EnginePlan = {
+      ...lisPlan,
+      tierCosts: [
+        { channel: "standard_retail", tier: tierFromNumber(2), daysSupply: 30, copayCents: 4700, coinsurancePct: null },
+      ],
+    };
+    const output = runAnalysis(meds, [withTierCosts], null, {
+      planYear: 2026,
+      category: "full_medicaid_gt_100_fpl",
+    });
+    expect(cellOf(output.cells, "m-generic", "plan-dsnp").copayCents).toBe(510);
+  });
+
+  it("priceScenarios charges the same LIS copay at any in-network pharmacy", () => {
+    const output = runAnalysis(meds, [lisPlan], null, {
+      planYear: 2026,
+      category: "full_medicaid_gt_100_fpl",
+    });
+    const scenarios: PricingScenario[] = [
+      {
+        key: "ph-1",
+        label: "Sav-Mor Drug",
+        kind: "retail",
+        channelByPlan: { "plan-dsnp": "standard_retail" },
+      },
+    ];
+    const matrix = priceScenarios(output.cells, meds, [lisPlan], scenarios, {
+      planYear: 2026,
+      category: "full_medicaid_gt_100_fpl",
+    });
+    expect(matrix[0]!.estMonthlyCents).toBe(510 + 1265);
+    expect(matrix[0]!.isPartial).toBe(false);
+  });
+});

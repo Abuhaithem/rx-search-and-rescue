@@ -33,6 +33,7 @@ export default async function IntakeReviewPage({
       takesPrescriptions: intake.client.takesPrescriptions,
       deliveryPreferred: intake.client.deliveryPreferred,
       mailOrderInterest: intake.client.mailOrderInterest,
+      lisCategory: intake.client.lisCategory,
     },
     medications: intake.medications.map((m) => ({
       id: m.id,

@@ -299,6 +299,7 @@ export async function loadComparisonInputs(analysisId: string): Promise<Comparis
       coinsurancePct: tc.coinsurancePct == null ? null : Number(tc.coinsurancePct),
     })),
     clientPharmacyStatus: statusForPrimary(ap.plan.id),
+    lisCostSharing: ap.plan.lisCostSharing,
   }));
   const orderedPlanIds = orderedPlanRows.map((ap) => ap.plan.id);
   const mailChannelByPlan = new Map(
@@ -643,12 +644,17 @@ export async function getComparison(analysisId: string): Promise<ComparisonData 
   const inputs = await loadComparisonInputs(analysisId);
   if (!inputs) return null;
 
-  const output = runAnalysis(inputs.engineMedications, inputs.enginePlans);
+  const lis = {
+    planYear: inputs.analysis.planYear,
+    category: inputs.client.lisCategory ?? null,
+  };
+  const output = runAnalysis(inputs.engineMedications, inputs.enginePlans, null, lis);
   const matrixCells = priceScenarios(
     output.cells,
     inputs.engineMedications,
     inputs.enginePlans,
     inputs.scenarios.map((s) => s.scenario),
+    lis,
   );
   const { plans: planColumns, grid } = zipComparison(inputs, output);
 

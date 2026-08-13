@@ -72,7 +72,8 @@ export async function selectPlans(
       if (!plan.formulary || plan.formulary.status !== "active") {
         return err(`${plan.name} has no active formulary — ingest and activate it first`);
       }
-      if (!isTierCostsComplete(plan.tierCosts)) {
+      // LIS (D-SNP) plans price from the CMS schedule — no tier grid needed.
+      if (!plan.lisCostSharing && !isTierCostsComplete(plan.tierCosts)) {
         return err(`${plan.name} is missing tier cost-sharing rows (tiers 1–5)`);
       }
     }
@@ -124,7 +125,10 @@ export async function runComparison(
     if (inputs.enginePlans.length === 0) return err("Select plans before running the comparison");
     if (inputs.engineMedications.length === 0) return err("The client has no medications to compare");
 
-    const output = runAnalysis(inputs.engineMedications, inputs.enginePlans);
+    const output = runAnalysis(inputs.engineMedications, inputs.enginePlans, null, {
+      planYear: inputs.analysis.planYear,
+      category: inputs.client.lisCategory ?? null,
+    });
 
     const db = getDb();
     await db.transaction(async (tx) => {

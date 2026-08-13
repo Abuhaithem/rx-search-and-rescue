@@ -7,8 +7,13 @@
  * ./display; overrides are applied last so agent edits always win.
  */
 import { and, eq, inArray } from "drizzle-orm";
-import { analyses, getDb, planPharmacyNetworks, profiles } from "@rxsr/db";
-import { CHANNEL_LABELS, type Cents, type NetworkStatus } from "@rxsr/core";
+import { analyses, formularyEntries, getDb, planPharmacyNetworks, profiles } from "@rxsr/db";
+import {
+  CHANNEL_LABELS,
+  lisCopayCents,
+  type Cents,
+  type NetworkStatus,
+} from "@rxsr/core";
 import {
   findTierCost,
   mailChannelForPlan,
@@ -142,6 +147,32 @@ export async function buildReportModel(analysisId: string): Promise<ReportModel 
     ]),
   );
 
+  // LIS (D-SNP) plans price from the CMS schedule, which needs the matched
+  // entry's brand/generic status — loaded in one shot from provenance ids.
+  const lisPlanIds = new Set(
+    orderedPlans.filter((ap) => ap.plan.lisCostSharing).map((ap) => ap.planId),
+  );
+  const lisCategory = analysis.client.lisCategory ?? null;
+  const isBrandByEntryId = new Map<string, boolean>();
+  if (lisPlanIds.size > 0) {
+    const entryIds = analysis.results
+      .filter((r) => lisPlanIds.has(r.planId) && r.matchedEntryId != null)
+      .map((r) => r.matchedEntryId!);
+    if (entryIds.length > 0) {
+      const entryRows = await db
+        .select({ id: formularyEntries.id, isBrand: formularyEntries.isBrand })
+        .from(formularyEntries)
+        .where(inArray(formularyEntries.id, entryIds));
+      for (const row of entryRows) isBrandByEntryId.set(row.id, row.isBrand);
+    }
+  }
+  const lisCopayForResult = (matchedEntryId: string | null): Cents | null => {
+    if (lisCategory == null || matchedEntryId == null) return null;
+    const isBrand = isBrandByEntryId.get(matchedEntryId);
+    if (isBrand === undefined) return null;
+    return lisCopayCents(analysis.planYear, lisCategory, isBrand);
+  };
+
   // Grid from persisted results, medications in intake order.
   const resultByKey = new Map(
     analysis.results.map((r) => [`${r.medicationId}:${r.planId}`, r]),
@@ -157,17 +188,20 @@ export async function buildReportModel(analysisId: string): Promise<ReportModel 
       if (!result) {
         return { display: "—", coverage: "not_on_formulary" as const, overridden: false };
       }
+      const lisPlan = lisPlanIds.has(ap.planId);
       const channel = resolveChannel(statusForPrimary(ap.planId), null);
       const cost =
-        channel && result.tier != null
+        !lisPlan && channel && result.tier != null
           ? findTierCost(tierCostsByPlan.get(ap.planId) ?? [], result.tier, channel)
           : null;
       return {
         display: formatGridCellDisplay({
           coverage: result.coverage,
           tier: result.tier,
-          copayCents: cost?.copayCents ?? null,
-          coinsurancePct: cost?.coinsurancePct ?? null,
+          copayCents: lisPlan
+            ? lisCopayForResult(result.matchedEntryId)
+            : (cost?.copayCents ?? null),
+          coinsurancePct: lisPlan ? null : (cost?.coinsurancePct ?? null),
           substitutionNote: result.substitutionNote,
         }),
         coverage: result.coverage,
@@ -195,9 +229,33 @@ export async function buildReportModel(analysisId: string): Promise<ReportModel 
     premiumCents: ap.plan.premiumCents,
     rxDeductibleCents: ap.plan.rxDeductibleCents,
     deductibleTiers: ap.plan.deductibleTiers,
-    entries: [],
+    // Stub entries carry the brand flag LIS pricing needs; matching is not
+    // re-run here (cells come from persisted results).
+    entries: lisPlanIds.has(ap.planId)
+      ? analysis.results
+          .filter(
+            (r) =>
+              r.planId === ap.planId &&
+              r.matchedEntryId != null &&
+              isBrandByEntryId.has(r.matchedEntryId),
+          )
+          .map((r) => ({
+            id: r.matchedEntryId!,
+            rawDrugName: "",
+            normalizedName: null,
+            rxcuis: [],
+            isBrand: isBrandByEntryId.get(r.matchedEntryId!)!,
+            tier: r.tier ?? 0,
+            pa: false,
+            st: false,
+            qlQuantity: null,
+            qlDays: null,
+            extraFlags: [],
+          }))
+      : [],
     tierCosts: tierCostsByPlan.get(ap.planId) ?? [],
     clientPharmacyStatus: statusForPrimary(ap.planId),
+    lisCostSharing: ap.plan.lisCostSharing,
   }));
   const cells: CellResult[] = analysis.results.map((r) => ({
     medicationId: r.medicationId,
@@ -230,7 +288,10 @@ export async function buildReportModel(analysisId: string): Promise<ReportModel 
 
   const costMatrix = buildReportCostMatrix(
     scenarios,
-    priceScenarios(cells, engineMedications, enginePlans, scenarios.map((s) => s.scenario)),
+    priceScenarios(cells, engineMedications, enginePlans, scenarios.map((s) => s.scenario), {
+      planYear: analysis.planYear,
+      category: lisCategory,
+    }),
     orderedPlanIds,
   );
 
@@ -274,7 +335,16 @@ export async function buildReportModel(analysisId: string): Promise<ReportModel 
         deductibleTiers: ap.plan.deductibleTiers,
       })),
     ),
-    disclaimers: DISCLAIMERS,
+    disclaimers:
+      lisPlanIds.size > 0
+        ? [
+            ...DISCLAIMERS,
+            "For Dual Special Needs (D-SNP) plans, drug copays shown are the CMS Extra Help " +
+              "(Low-Income Subsidy) amounts for the member's assistance level, not plan tier " +
+              "pricing. The amount owed depends on the member's Medicaid/LIS status, which " +
+              "should be verified with the carrier or state.",
+          ]
+        : DISCLAIMERS,
   };
 
   return applyOverrides(

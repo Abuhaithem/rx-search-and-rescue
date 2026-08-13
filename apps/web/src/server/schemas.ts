@@ -51,6 +51,15 @@ export const clientFieldsSchema = z.object({
   takesPrescriptions: z.boolean().nullish(),
   deliveryPreferred: z.boolean().nullish(),
   mailOrderInterest: z.enum(["yes", "no"]).nullish(),
+  /** CMS dual/LIS category for D-SNP pricing; null = not LIS / unknown. */
+  lisCategory: z
+    .enum([
+      "full_medicaid_le_100_fpl",
+      "full_medicaid_gt_100_fpl",
+      "institutional_or_hcbs",
+      "other_full_lis",
+    ])
+    .nullish(),
 });
 export type ClientFieldsInput = z.input<typeof clientFieldsSchema>;
 
@@ -109,6 +118,8 @@ export const planUpsertSchema = z
     rxDeductibleCents: z.number().int().min(0).nullish(),
     deductibleTiers: z.array(z.number().int().min(1).max(6)).optional(),
     curated: z.boolean().optional(),
+    /** D-SNP: CMS LIS copays apply; the tier-cost grid is ignored. */
+    lisCostSharing: z.boolean().optional(),
     /** Per-plan SoB tier display labels; empty strings are dropped on save. */
     tierLabels: z
       .object({

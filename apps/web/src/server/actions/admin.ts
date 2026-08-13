@@ -709,6 +709,7 @@ export async function upsertPlan(
         rxDeductibleCents: input.rxDeductibleCents ?? null,
         deductibleTiers: input.deductibleTiers ?? [],
         curated: input.curated ?? true,
+        ...(input.lisCostSharing !== undefined ? { lisCostSharing: input.lisCostSharing } : {}),
         ...(tierLabels !== undefined ? { tierLabels } : {}),
       };
 

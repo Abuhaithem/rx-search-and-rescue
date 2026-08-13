@@ -24,6 +24,14 @@ export const formularyStatus = pgEnum("formulary_status", [
   "superseded",
 ]);
 
+/** CMS dual/LIS copay categories — see @rxsr/core analysis/lis. */
+export const lisCategory = pgEnum("lis_category", [
+  "full_medicaid_le_100_fpl",
+  "full_medicaid_gt_100_fpl",
+  "institutional_or_hcbs",
+  "other_full_lis",
+]);
+
 export const pharmacyChannel = pgEnum("pharmacy_channel", [
   "preferred_retail",
   "standard_retail",
@@ -271,6 +279,11 @@ export const plans = pgTable(
     /** Agency curation: only curated plans surface by default on plan select. */
     curated: boolean("curated").notNull().default(true),
     /**
+     * D-SNP: drug costs follow the CMS LIS copay schedule (member category ×
+     * brand/generic) — the tier-cost grid does not apply to this plan.
+     */
+    lisCostSharing: boolean("lis_cost_sharing").notNull().default(false),
+    /**
      * Per-plan tier DISPLAY labels from the Summary of Benefits (e.g. t1 →
      * "Preferred Generic"). Presentation metadata only — tier identity stays
      * t1..t6/insulin everywhere (engine, formularies, CMS import).
@@ -416,6 +429,8 @@ export const clients = pgTable("clients", {
   county: text("county"), // confirmed county for multi-county ZIPs
   takesPrescriptions: boolean("takes_prescriptions"),
   deliveryPreferred: boolean("delivery_preferred"),
+  /** Dual/LIS category for D-SNP pricing; null = not LIS or unknown. */
+  lisCategory: lisCategory("lis_category"),
   mailOrderInterest: text("mail_order_interest"), // "yes" | "no" (legacy rows may hold "ask_client")
   sourceRxcPath: text("source_rxc_path"), // uploaded RxC PDF in Storage
   createdBy: uuid("created_by").references(() => profiles.id),

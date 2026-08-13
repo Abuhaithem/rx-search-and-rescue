@@ -115,7 +115,7 @@ export async function getCarrierCatalog(planYear: number): Promise<CarrierCatalo
         contractPlanId: plan.contractPlanId,
         premiumCents: plan.premiumCents,
         curated: plan.curated,
-        tierCostsComplete: isTierCostsComplete(plan.tierCosts),
+        tierCostsComplete: plan.lisCostSharing || isTierCostsComplete(plan.tierCosts),
         serviceAreaCount: plan.serviceAreas.length,
       })),
       formularies: carrier.formularies.map((formulary) => ({

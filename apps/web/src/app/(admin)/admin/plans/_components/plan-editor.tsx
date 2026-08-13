@@ -6,6 +6,7 @@ import { useState, useTransition } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/components/ui/sonner";
@@ -126,6 +127,7 @@ export function PlanEditor({ row }: { row: PlanCatalogRow }) {
   const [grid, setGrid] = useState<Record<string, string>>(initialGrid.values);
   const [gridRows, setGridRows] = useState<GridRow[]>(initialGrid.rows);
   const [nextRowId, setNextRowId] = useState(initialGrid.rows.length);
+  const [lisCostSharing, setLisCostSharing] = useState(plan.lisCostSharing);
   // Display labels only — tier identity stays t1..t6/insulin.
   const [tierLabels, setTierLabels] = useState<Record<string, string>>(() => ({
     ...plan.tierLabels,
@@ -142,7 +144,8 @@ export function PlanEditor({ row }: { row: PlanCatalogRow }) {
 
     const tierCostRows: TierCostRowInput[] = [];
     const seenCombos = new Set<string>();
-    for (const gridRow of gridRows) {
+    // LIS plans skip the grid entirely — CMS copays price them.
+    for (const gridRow of lisCostSharing ? [] : gridRows) {
       const days = Number((gridRow.days.match(/\d+/) ?? [])[0]);
       if (!Number.isInteger(days) || days < 1 || days > 365) {
         toast.error(
@@ -196,6 +199,7 @@ export function PlanEditor({ row }: { row: PlanCatalogRow }) {
         rxDeductibleCents,
         deductibleTiers,
         curated: plan.curated,
+        lisCostSharing,
         tierLabels: cleanedTierLabels,
       });
       if (!metaResult.ok) {
@@ -281,6 +285,30 @@ export function PlanEditor({ row }: { row: PlanCatalogRow }) {
           </div>
         </div>
 
+        <label className="flex items-start gap-2 text-sm">
+          <Checkbox
+            checked={lisCostSharing}
+            onCheckedChange={(checked) => setLisCostSharing(checked === true)}
+            className="mt-0.5"
+          />
+          <span>
+            <span className="font-semibold text-deepwater">
+              D-SNP — LIS cost sharing applies
+            </span>
+            <span className="block text-xs text-steel">
+              Drug copays follow the CMS Extra Help schedule (member&apos;s Medicaid/LIS level ×
+              brand/generic) instead of a tier grid. Set the client&apos;s LIS level at intake.
+            </span>
+          </span>
+        </label>
+
+        {lisCostSharing ? (
+          <p className="rounded-card bg-fog px-4 py-3 text-sm text-steel">
+            No tier grid for this plan: the analysis prices each drug from the CMS LIS copay
+            schedule for the plan year, using the client&apos;s LIS level and the drug&apos;s
+            brand/generic status. Deductible is $0 by law.
+          </p>
+        ) : (
         <section className="space-y-2">
           <h3 className="text-sm font-semibold text-deepwater">
             Tier cost sharing (from Summary of Benefits)
@@ -414,6 +442,7 @@ export function PlanEditor({ row }: { row: PlanCatalogRow }) {
             </p>
           ) : null}
         </section>
+        )}
 
         <div className="flex items-center justify-between">
           <Button onClick={handleSave} disabled={isPending}>

@@ -152,7 +152,8 @@ export async function getAvailablePlans(clientId: string, planYear: number): Pro
         rxDeductibleCents: plan.rxDeductibleCents,
         formularyStatus,
         pharmacyStatus: statusByPlan.get(plan.id) ?? null,
-        tierCostsComplete: isTierCostsComplete(tierCosts),
+        // LIS (D-SNP) plans need no tier grid — the CMS schedule prices them.
+        tierCostsComplete: plan.lisCostSharing || isTierCostsComplete(tierCosts),
         isCurrent: plan.id === currentPlanId,
       };
     })
@@ -204,7 +205,7 @@ export async function getPlanCatalog(planYear: number): Promise<PlanCatalogRow[]
       carrierName: carrier.name,
       formularyLabel: formulary?.label ?? null,
       formularyStatus: formulary?.status ?? null,
-      tierCostsComplete: isTierCostsComplete(tierCosts),
+      tierCostsComplete: plan.lisCostSharing || isTierCostsComplete(tierCosts),
       tierCostCount: tierCosts.length,
       serviceAreaCount: serviceAreas.length,
       tierCosts: tierCosts.map((tc) => ({

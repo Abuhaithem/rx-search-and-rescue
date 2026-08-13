@@ -19,6 +19,7 @@ import type {
   PharmacyChannel,
 } from "../types";
 import { tierFromNumber } from "../types";
+import { lisCopayCents, type LisCategory } from "./lis";
 
 // ── Inputs ───────────────────────────────────────────────────────────────────
 
@@ -69,6 +70,18 @@ export interface EnginePlan {
   tierCosts: EngineTierCost[];
   /** Client pharmacy's network status on this plan; null = unknown. */
   clientPharmacyStatus: NetworkStatus | null;
+  /**
+   * D-SNP: drug costs follow the CMS LIS schedule (client category ×
+   * brand/generic), not tier costs. tierCosts are ignored when true.
+   */
+  lisCostSharing?: boolean;
+}
+
+/** Client-side pricing context for LIS (D-SNP) plans. */
+export interface LisContext {
+  planYear: number;
+  /** Null = client's dual/LIS category unknown → no dollar figures. */
+  category: LisCategory | null;
 }
 
 // ── Outputs ──────────────────────────────────────────────────────────────────
@@ -359,6 +372,7 @@ export function runAnalysis(
   medications: EngineMedication[],
   plans: EnginePlan[],
   channelOverride: PharmacyChannel | null = null,
+  lis: LisContext | null = null,
 ): AnalysisOutput {
   const cells: CellResult[] = [];
   const summaries: PlanSummary[] = [];
@@ -399,16 +413,34 @@ export function runAnalysis(
       if (entry.st) stCount += 1;
       if (entry.qlQuantity != null) qlCount += 1;
 
-      const cost = channel ? findTierCost(plan.tierCosts, entry.tier, channel) : null;
+      // LIS (D-SNP) plans price from the CMS schedule: category × brand.
+      // Tier costs and channels don't apply; a per-fill copay ≈ a month.
+      let cellCopayCents: Cents | null;
+      let cellCoinsurancePct: number | null;
+      if (plan.lisCostSharing === true) {
+        cellCopayCents =
+          lis && lis.category != null
+            ? lisCopayCents(lis.planYear, lis.category, entry.isBrand)
+            : null;
+        cellCoinsurancePct = null;
+        if (!med.prn) {
+          if (cellCopayCents != null) estMonthly += cellCopayCents;
+          else estMonthlyPartial = true; // LIS category unknown → no dollars
+        }
+      } else {
+        const cost = channel ? findTierCost(plan.tierCosts, entry.tier, channel) : null;
+        cellCopayCents = cost?.copayCents ?? null;
+        cellCoinsurancePct = cost?.coinsurancePct ?? null;
 
-      if (!med.prn) {
-        if (cost?.copayCents != null) {
-          // Normalize to a 30-day month: a 90-day mail-order copay is ÷3.
-          estMonthly += Math.round(cost.copayCents * (30 / cost.daysSupply));
-        } else if (cost?.coinsurancePct != null) {
-          estMonthlyValid = false; // can't know $ without a drug price
-        } else {
-          estMonthlyPartial = true; // missing tier-cost row or out-of-network
+        if (!med.prn) {
+          if (cost?.copayCents != null) {
+            // Normalize to a 30-day month: a 90-day mail-order copay is ÷3.
+            estMonthly += Math.round(cost.copayCents * (30 / cost.daysSupply));
+          } else if (cost?.coinsurancePct != null) {
+            estMonthlyValid = false; // can't know $ without a drug price
+          } else {
+            estMonthlyPartial = true; // missing tier-cost row or out-of-network
+          }
         }
       }
 
@@ -430,8 +462,8 @@ export function runAnalysis(
               : null,
           extraFlags: entry.extraFlags,
         },
-        copayCents: cost?.copayCents ?? null,
-        coinsurancePct: cost?.coinsurancePct ?? null,
+        copayCents: cellCopayCents,
+        coinsurancePct: cellCoinsurancePct,
         needsConfirmation: match.needsConfirmation,
       });
     }
@@ -463,9 +495,13 @@ export function priceScenarios(
   medications: EngineMedication[],
   plans: EnginePlan[],
   scenarios: PricingScenario[],
+  lis: LisContext | null = null,
 ): CostMatrixCell[] {
   const prnById = new Map(medications.map((m) => [m.id, m.prn]));
   const cellByKey = new Map(cells.map((c) => [`${c.medicationId}:${c.planId}`, c]));
+  const entryById = new Map(
+    plans.flatMap((p) => p.entries.map((e) => [e.id, e] as const)),
+  );
   const out: CostMatrixCell[] = [];
 
   for (const scenario of scenarios) {
@@ -493,6 +529,18 @@ export function priceScenarios(
         const cell = cellByKey.get(`${med.id}:${plan.id}`);
         if (!cell || cell.tier == null) continue; // not covered / not on formulary
         if (cell.coverage !== "covered" && cell.coverage !== "covered_equivalent") continue;
+
+        // LIS (D-SNP) plans cost the same at every in-network pharmacy.
+        if (plan.lisCostSharing === true) {
+          const entry = cell.matchedEntryId ? entryById.get(cell.matchedEntryId) : undefined;
+          const copay =
+            entry && lis && lis.category != null
+              ? lisCopayCents(lis.planYear, lis.category, entry.isBrand)
+              : null;
+          if (copay != null) estMonthly += copay;
+          else isPartial = true;
+          continue;
+        }
 
         const cost = findTierCost(plan.tierCosts, cell.tier, channel);
         const monthly = cost ? monthlyCopayCents(cost) : null;
