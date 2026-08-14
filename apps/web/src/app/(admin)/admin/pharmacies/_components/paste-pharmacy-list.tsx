@@ -24,14 +24,21 @@ const ZIP_RE = /^\d{5}$/;
 
 /**
  * One pasted line → name / address / city / zip. Excel and Sheets paste as
- * tab-separated; a plain comma table falls back to comma with everything
- * between name and the trailing city+zip folded into the address.
+ * tab-separated; column-aligned text (e.g. copied out of a PDF roster)
+ * splits on 2+ spaces; a plain comma table folds everything between name
+ * and the trailing city+zip into the address. A leading row number is
+ * dropped and the †-unverified marker some rosters use is stripped.
  */
 function parseLine(line: string): Omit<EditableRow, "key"> | null {
   const cells = (
-    line.includes("\t") ? line.split("\t") : line.split(",")
-  ).map((c) => c.trim());
-  const nonEmpty = cells.filter((c) => c !== "");
+    line.includes("\t")
+      ? line.split("\t")
+      : /\S\s{2,}\S/.test(line.trim())
+        ? line.trim().split(/\s{2,}/)
+        : line.split(",")
+  ).map((c) => c.replace(/†/g, "").trim());
+  let nonEmpty = cells.filter((c) => c !== "");
+  if (nonEmpty.length > 2 && /^\d{1,4}$/.test(nonEmpty[0]!)) nonEmpty = nonEmpty.slice(1);
   if (nonEmpty.length < 2) return null;
   const name = nonEmpty[0] ?? "";
   const rest = nonEmpty.slice(1);
