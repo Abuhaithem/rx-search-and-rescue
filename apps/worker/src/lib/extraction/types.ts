@@ -8,6 +8,7 @@ import type {
   FormularyLegendExtraction,
   FormularyPlanNamesExtraction,
   PharmacyDirectoryExtraction,
+  PharmacyResolution,
   QuantityLimitPageExtraction,
   SobExtraction,
 } from "./schemas";
@@ -62,6 +63,11 @@ export interface ExtractionProvider {
     directoryText: string,
     options?: ExtractionCallOptions,
   ): Promise<PharmacyDirectoryExtraction>;
+  /** Pick which numbered candidate a free-text pharmacy entry refers to. */
+  resolvePharmacyCandidate(
+    promptText: string,
+    options?: ExtractionCallOptions,
+  ): Promise<PharmacyResolution>;
 }
 
 export type {

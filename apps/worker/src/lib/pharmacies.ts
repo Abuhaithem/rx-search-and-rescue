@@ -34,3 +34,26 @@ export async function loadZipCandidates(
   const prefix = zip.slice(0, 3);
   return db.select().from(pharmacies).where(ilike(pharmacies.zip, `${prefix}%`));
 }
+
+/**
+ * Prompt for the LLM pharmacy-resolution fallback. Contains only the
+ * pharmacy free text and DB candidates — no client identity, so nothing
+ * PHI-shaped leaves with it.
+ */
+export function pharmacyResolutionPrompt(
+  rawText: string,
+  zipHint: string,
+  candidates: PharmacyCandidate[],
+): string {
+  const lines = candidates.map((c, index) => {
+    const parts = [c.name, c.address1, c.city, c.state, c.zip].filter(Boolean);
+    return `${index}. ${parts.join(", ")}`;
+  });
+  return [
+    `The client wrote this pharmacy on a form: "${rawText}"`,
+    `Client area ZIP: ${zipHint}`,
+    "",
+    "Known pharmacies nearby:",
+    ...lines,
+  ].join("\n");
+}

@@ -528,6 +528,8 @@ export interface PharmacyOption {
   city: string | null;
   state: string | null;
   zip: string | null;
+  /** In the client's own ZIP — cards mark these and sort them first. */
+  inClientZip: boolean;
   /** Effective status per compared plan (override else carrier network). */
   statusByPlan: Record<string, NetworkStatus | null>;
 }
@@ -563,19 +565,20 @@ export async function getComparablePharmacies(
   });
   if (!analysis) return null;
 
-  // Scope to the client's ZIP; state, then everything, as fallbacks when the
-  // client record is incomplete.
+  // Whole state stays available (clients use pharmacies one town over) —
+  // same-ZIP rows are flagged so the cards can mark and front-load them.
   const state = analysis.client.state;
-  const zip = analysis.client.zip;
-  const rows = await db.query.pharmacies.findMany({
-    where: zip
-      ? eq(pharmacies.zip, zip)
-      : state
-        ? eq(pharmacies.state, state)
-        : undefined,
-    columns: { id: true, name: true, city: true, state: true, zip: true },
-    orderBy: (p, { asc }) => [asc(p.name)],
-  });
+  const clientZip = analysis.client.zip;
+  const rows = (
+    await db.query.pharmacies.findMany({
+      where: state ? eq(pharmacies.state, state) : undefined,
+      columns: { id: true, name: true, city: true, state: true, zip: true },
+      orderBy: (p, { asc }) => [asc(p.name)],
+    })
+  ).sort((a, b) =>
+    Number(clientZip != null && b.zip === clientZip) -
+    Number(clientZip != null && a.zip === clientZip),
+  );
 
   // Effective status per option × compared plan: carrier network default,
   // plan-level exception wins — same resolution the comparison itself uses.
@@ -629,6 +632,7 @@ export async function getComparablePharmacies(
 
   const options: PharmacyOption[] = rows.map((row) => ({
     ...row,
+    inClientZip: clientZip != null && row.zip === clientZip,
     statusByPlan: Object.fromEntries(
       comparedPlans.map((plan) => [
         plan.id,

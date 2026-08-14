@@ -1,10 +1,12 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { and, asc, eq, ilike, or } from "drizzle-orm";
+import { and, asc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { getDb, pharmacies } from "@rxsr/db";
 import { err, errorMessage, ok, type ActionResult } from "../action-result";
 import { requireRole } from "../auth";
+import { writeAudit } from "../audit";
 
 export interface PharmacySearchHit {
   id: string;
@@ -24,7 +26,8 @@ const zipSchema = z
 
 /**
  * Read-only search behind the pharmacy combobox — no audit row needed.
- * With a client ZIP the results are scoped to that ZIP only.
+ * Never excludes by ZIP (the right pharmacy is often one town over) — with a
+ * client ZIP, same-ZIP hits rank first and the UI badges in/out of ZIP.
  */
 export async function searchPharmacies(
   query: string,
@@ -50,10 +53,112 @@ export async function searchPharmacies(
         zip: pharmacies.zip,
       })
       .from(pharmacies)
-      .where(zip ? and(eq(pharmacies.zip, zip), textMatch) : textMatch)
-      .orderBy(asc(pharmacies.name))
+      .where(textMatch)
+      .orderBy(
+        ...(zip ? [sql`case when ${pharmacies.zip} = ${zip} then 0 else 1 end`] : []),
+        asc(pharmacies.name),
+      )
       .limit(20);
     return ok(rows);
+  } catch (e) {
+    return err(errorMessage(e));
+  }
+}
+
+const importRowSchema = z.object({
+  /** Storefront name as printed, store # included ("Walgreens #5841"). */
+  name: z.string().trim().min(2).max(200),
+  address1: z.string().trim().max(200).nullable(),
+  city: z.string().trim().max(100).nullable(),
+  zip: z.string().regex(/^\d{5}$/),
+});
+export type PharmacyImportRow = z.infer<typeof importRowSchema>;
+
+const importSchema = z.object({
+  state: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^[A-Z]{2}$/),
+  rows: z.array(importRowSchema).min(1).max(2000),
+});
+
+/**
+ * The master pharmacy list, pasted as a table. Upserts into the pharmacies
+ * table — the single source every network, picker, and match runs against.
+ * Identity is name+ZIP: re-pasting an updated list refreshes addresses
+ * instead of duplicating rows.
+ */
+export async function importPharmacyList(
+  state: string,
+  rows: PharmacyImportRow[],
+): Promise<ActionResult<{ inserted: number; updated: number }>> {
+  try {
+    const profile = await requireRole("admin", "manager");
+    const input = importSchema.parse({ state, rows });
+
+    // Last occurrence wins within the pasted list itself.
+    const byKey = new Map<string, PharmacyImportRow>();
+    for (const row of input.rows) {
+      byKey.set(`${row.name.toLowerCase()}|${row.zip}`, row);
+    }
+    const uniqueRows = [...byKey.values()];
+
+    const db = getDb();
+    const existing = await db
+      .select({ id: pharmacies.id, name: pharmacies.name, zip: pharmacies.zip })
+      .from(pharmacies)
+      .where(
+        and(
+          eq(pharmacies.state, input.state),
+          inArray(pharmacies.zip, [...new Set(uniqueRows.map((r) => r.zip))]),
+        ),
+      );
+    const existingByKey = new Map(
+      existing.map((row) => [`${row.name.toLowerCase()}|${row.zip}`, row.id]),
+    );
+
+    let inserted = 0;
+    let updated = 0;
+    await db.transaction(async (tx) => {
+      const toInsert: (typeof pharmacies.$inferInsert)[] = [];
+      for (const row of uniqueRows) {
+        const existingId = existingByKey.get(`${row.name.toLowerCase()}|${row.zip}`);
+        if (existingId) {
+          await tx
+            .update(pharmacies)
+            .set({
+              address1: row.address1,
+              city: row.city,
+              state: input.state,
+            })
+            .where(eq(pharmacies.id, existingId));
+          updated += 1;
+        } else {
+          toInsert.push({
+            name: row.name,
+            address1: row.address1,
+            city: row.city,
+            state: input.state,
+            zip: row.zip,
+            source: "list",
+          });
+        }
+      }
+      if (toInsert.length > 0) {
+        await tx.insert(pharmacies).values(toInsert);
+        inserted = toInsert.length;
+      }
+      await writeAudit(tx, {
+        actorId: profile.id,
+        action: "pharmacy.list_imported",
+        entityType: "pharmacy_list",
+        meta: { state: input.state, inserted, updated },
+      });
+    });
+
+    revalidatePath("/", "layout");
+    return ok({ inserted, updated });
   } catch (e) {
     return err(errorMessage(e));
   }

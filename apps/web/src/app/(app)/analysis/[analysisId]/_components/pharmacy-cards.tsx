@@ -47,9 +47,12 @@ export function PharmacyCards({
               (o.city ?? "").toLowerCase().includes(q) ||
               (o.zip ?? "").includes(q),
           );
+    // Selected pin first; then the client's own ZIP; then the rest of the state.
+    const unselected = matches.filter((o) => !selected.includes(o.id));
     const ordered = [
       ...matches.filter((o) => selected.includes(o.id)),
-      ...matches.filter((o) => !selected.includes(o.id)),
+      ...unselected.filter((o) => o.inClientZip),
+      ...unselected.filter((o) => !o.inClientZip),
     ];
     if (q !== "" || showAll) return { visible: ordered, hiddenCount: 0 };
     const selectedCount = ordered.filter((o) => selected.includes(o.id)).length;
@@ -138,8 +141,15 @@ export function PharmacyCards({
                     className="mt-0.5"
                   />
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-semibold leading-tight text-deepwater">
-                      {pharmacy.name}
+                    <div className="flex items-center gap-1.5">
+                      <span className="truncate text-sm font-semibold leading-tight text-deepwater">
+                        {pharmacy.name}
+                      </span>
+                      {pharmacy.inClientZip ? (
+                        <span className="shrink-0 rounded-chip bg-fog px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-harbor">
+                          Client&apos;s ZIP
+                        </span>
+                      ) : null}
                     </div>
                     <div className="text-xs text-steel">
                       {[pharmacy.city, pharmacy.state].filter(Boolean).join(", ")}

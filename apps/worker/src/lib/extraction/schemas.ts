@@ -67,6 +67,13 @@ export const quantityLimitPageSchema = z.object({
 });
 export type QuantityLimitPageExtraction = z.infer<typeof quantityLimitPageSchema>;
 
+export const pharmacyResolutionSchema = z.object({
+  /** Index into the provided candidate list; null = none is the pharmacy. */
+  matchedIndex: z.number().int().min(0).nullable(),
+  confidence: z.number().min(0).max(1),
+});
+export type PharmacyResolution = z.infer<typeof pharmacyResolutionSchema>;
+
 export const formularyPlanNamesSchema = z.object({
   /** Exact plan names this formulary document says it applies to. */
   planNames: z.array(z.string().min(1)).max(20),
@@ -317,6 +324,20 @@ const DIRECTORY_JSON_SCHEMA: JsonObjectSchema = {
   },
 };
 
+const PHARMACY_RESOLUTION_JSON_SCHEMA: JsonObjectSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["matchedIndex", "confidence"],
+  properties: {
+    matchedIndex: {
+      type: ["integer", "null"],
+      minimum: 0,
+      description: "Index of the matching candidate; null when none is the same pharmacy.",
+    },
+    confidence: { type: "number", minimum: 0, maximum: 1 },
+  },
+};
+
 const PLAN_NAMES_JSON_SCHEMA: JsonObjectSchema = {
   type: "object",
   additionalProperties: false,
@@ -488,6 +509,23 @@ Classify network status — carriers use DIFFERENT vocabulary for the same two t
 Always copy the document's verbatim cost-share wording into statusLabel (null when there is none). Never invent rows.`,
   jsonSchema: DIRECTORY_JSON_SCHEMA,
   parse: (input) => pharmacyDirectoryExtractionSchema.parse(input),
+};
+
+/**
+ * Fallback pharmacy resolution when the deterministic scorer finds nothing:
+ * the model only PICKS among database candidates (by index), so it can link
+ * but never invent. Results always land unconfirmed for agent review.
+ */
+export const pharmacyResolutionSpec: ExtractionSpec<PharmacyResolution> = {
+  toolName: "record_pharmacy_resolution",
+  description: "Record which candidate pharmacy the free-text entry refers to.",
+  systemPrompt: `You match a pharmacy a Medicare client wrote on a form against a numbered list of known pharmacies. Clients write storefront names with typos, abbreviations, store numbers, or partial addresses ("Walgreens on State St", "Sav-Mor Meridian").
+Rules:
+- Answer with the INDEX of the candidate that is the same pharmacy location, and your confidence (0-1).
+- Chain name alone is not enough when several locations of that chain are listed — use street, city, or ZIP to pick the location; if you cannot tell which location, return null.
+- Return null with low confidence when no candidate is plausibly the same pharmacy. Never guess.`,
+  jsonSchema: PHARMACY_RESOLUTION_JSON_SCHEMA,
+  parse: (input) => pharmacyResolutionSchema.parse(input),
 };
 
 export const formularyPlanNamesSpec: ExtractionSpec<FormularyPlanNamesExtraction> = {

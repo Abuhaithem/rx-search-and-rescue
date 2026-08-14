@@ -115,9 +115,22 @@ export function PharmacyCombobox({ value, onChange, invalid, clientZip }: Pharma
                     hit.id === value.pharmacyId ? "text-covered" : "invisible",
                   )}
                 />
-                <span className="min-w-0">
-                  <span className="block truncate text-sm font-medium text-deepwater">
-                    {hit.name}
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-1.5">
+                    <span className="truncate text-sm font-medium text-deepwater">
+                      {hit.name}
+                    </span>
+                    {clientZip ? (
+                      hit.zip === clientZip ? (
+                        <span className="shrink-0 rounded-chip bg-fog px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-harbor">
+                          Client&apos;s ZIP
+                        </span>
+                      ) : (
+                        <span className="shrink-0 rounded-chip bg-fog px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em] text-steel">
+                          Outside ZIP
+                        </span>
+                      )
+                    ) : null}
                   </span>
                   <span className="flex items-center gap-1 text-xs text-steel">
                     <MapPin className="size-3 shrink-0" />

@@ -39,6 +39,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", match: ["/dashboard", "/intake", "/analysis"] },
   { label: "Carriers", href: "/admin/carriers", match: ["/admin/carriers", "/admin/formularies"], adminOnly: true },
   { label: "Plans", href: "/admin/plans", match: ["/admin/plans"], adminOnly: true },
+  { label: "Pharmacies", href: "/admin/pharmacies", match: ["/admin/pharmacies"], adminOnly: true },
 ];
 
 function AppShell({

@@ -21,7 +21,11 @@ import type { RxcIntakeJob } from "../queues";
 import { markJobDone, markJobFailed, markJobRunning, updateJobProgress } from "../lib/db";
 import { parseDosageText } from "../lib/dosage";
 import { parseRxcText } from "../lib/rxc-parse";
-import { candidateFromPharmacyRow, loadZipCandidates } from "../lib/pharmacies";
+import {
+  candidateFromPharmacyRow,
+  loadZipCandidates,
+  pharmacyResolutionPrompt,
+} from "../lib/pharmacies";
 import { createJobDeps, type JobDeps } from "./deps";
 
 /** Single best drug plan: pdp beats ma_pd; med_supp/other never qualify. */
@@ -163,13 +167,25 @@ async function insertPharmacies(
     let pharmacyId: string | null = null;
     let matchConfidence: string | null = null;
     if (zip) {
-      // DB-only matching: unmatched entries stay unlinked and the agent
-      // resolves them with the intake pharmacy search.
-      const dbRows = await loadZipCandidates(db, zip);
-      const best = matchPharmacy(parsed, dbRows.map(candidateFromPharmacyRow))[0];
+      const candidates = (await loadZipCandidates(db, zip)).map(candidateFromPharmacyRow);
+      const best = matchPharmacy(parsed, candidates)[0];
       if (best) {
         pharmacyId = best.candidate.id;
         matchConfidence = best.score.toFixed(3);
+      } else if (candidates.length > 0) {
+        // Deterministic scorer found nothing → LLM fallback. It only PICKS
+        // among the DB candidates (never invents), the confidence is capped
+        // below the confident zone, and the link still lands unconfirmed —
+        // amber until an agent signs off. A failed call is a non-event.
+        const capped = candidates.slice(0, 40);
+        const resolution = await deps.extractor
+          .resolvePharmacyCandidate(pharmacyResolutionPrompt(rawText, zip, capped))
+          .catch(() => null);
+        const index = resolution?.matchedIndex;
+        if (resolution && index != null && index >= 0 && index < capped.length) {
+          pharmacyId = capped[index]!.id;
+          matchConfidence = Math.min(resolution.confidence, 0.7).toFixed(3);
+        }
       }
     }
 
