@@ -59,6 +59,8 @@ export interface IntakePolicy {
   carrierName: string | null;
   policyNumber: string | null;
   policyType: PolicyType;
+  /** Catalog plan the policy text matched (deterministic; agent confirms). */
+  suggestedPlanId: string | null;
   isCurrentDrugPlan: boolean;
   matchedPlanId: string | null;
 }
@@ -86,6 +88,8 @@ export interface IntakeReviewProps {
   medications: IntakeMedication[];
   pharmacies: IntakePharmacy[];
   policies: IntakePolicy[];
+  /** Curated catalog plans for the year — options for the current-plan match. */
+  planOptions: { id: string; label: string }[];
 }
 
 interface MedicationRowState extends IntakeMedication {
@@ -118,6 +122,19 @@ export function IntakeReview(props: IntakeReviewProps) {
   const [currentPolicyId, setCurrentPolicyId] = useState<string>(
     props.policies.find((p) => p.isCurrentDrugPlan)?.id ?? "none",
   );
+  const matchForPolicy = (policyId: string): string => {
+    const policy = props.policies.find((p) => p.id === policyId);
+    return policy?.matchedPlanId ?? policy?.suggestedPlanId ?? "none";
+  };
+  const [matchedPlanId, setMatchedPlanId] = useState<string>(() =>
+    matchForPolicy(props.policies.find((p) => p.isCurrentDrugPlan)?.id ?? "none"),
+  );
+  const selectCurrentPolicy = (policyId: string) => {
+    setCurrentPolicyId(policyId);
+    setMatchedPlanId(matchForPolicy(policyId));
+  };
+  const currentSuggestion =
+    props.policies.find((p) => p.id === currentPolicyId)?.suggestedPlanId ?? null;
   const rankOne = props.pharmacies.find((p) => p.rank === 1) ?? props.pharmacies[0] ?? null;
   const [pharmacySelection, setPharmacySelection] = useState<PharmacySelection>({
     label: rankOne?.pharmacyName ?? rankOne?.rawText ?? "",
@@ -261,7 +278,12 @@ export function IntakeReview(props: IntakeReviewProps) {
         policyNumber: p.policyNumber,
         policyType: p.policyType,
         isCurrentDrugPlan: p.id === currentPolicyId,
-        matchedPlanId: p.matchedPlanId,
+        matchedPlanId:
+          p.id === currentPolicyId
+            ? matchedPlanId === "none"
+              ? null
+              : matchedPlanId
+            : p.matchedPlanId,
       })),
     };
 
@@ -347,7 +369,7 @@ export function IntakeReview(props: IntakeReviewProps) {
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs text-steel">Current plan</Label>
-                  <Select value={currentPolicyId} onValueChange={setCurrentPolicyId}>
+                  <Select value={currentPolicyId} onValueChange={selectCurrentPolicy}>
                     <SelectTrigger className="w-56">
                       <SelectValue placeholder="Select current drug plan" />
                     </SelectTrigger>
@@ -363,6 +385,31 @@ export function IntakeReview(props: IntakeReviewProps) {
                     </SelectContent>
                   </Select>
                 </div>
+                {currentPolicyId !== "none" ? (
+                  <div className="space-y-1">
+                    <Label className="text-xs text-steel">
+                      In our catalog
+                      {matchedPlanId !== "none" && matchedPlanId === currentSuggestion ? (
+                        <span className="ml-1.5 rounded-chip bg-covered-soft px-1.5 py-0.5 text-[10px] font-semibold text-covered">
+                          auto-matched
+                        </span>
+                      ) : null}
+                    </Label>
+                    <Select value={matchedPlanId} onValueChange={setMatchedPlanId}>
+                      <SelectTrigger className="w-64">
+                        <SelectValue placeholder="Match to a catalog plan" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Not in catalog</SelectItem>
+                        {props.planOptions.map((option) => (
+                          <SelectItem key={option.id} value={option.id}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ) : null}
                 <div className="space-y-1">
                   <Label className="text-xs text-steel">Plan year</Label>
                   <Select value={String(planYear)} onValueChange={(v) => setPlanYear(Number(v))}>
@@ -389,6 +436,7 @@ export function IntakeReview(props: IntakeReviewProps) {
                     <PharmacyCombobox
                       value={pharmacySelection}
                       invalid={pharmacyUnconfirmed}
+                      clientZip={/^\d{5}$/.test(zip.trim()) ? zip.trim() : null}
                       onChange={(selection) => {
                         setPharmacySelection(selection);
                         setPharmacyTouched(true);

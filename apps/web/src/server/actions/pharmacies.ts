@@ -1,7 +1,7 @@
 "use server";
 
 import { z } from "zod";
-import { asc, ilike, or } from "drizzle-orm";
+import { and, asc, eq, ilike, or } from "drizzle-orm";
 import { getDb, pharmacies } from "@rxsr/db";
 import { err, errorMessage, ok, type ActionResult } from "../action-result";
 import { requireRole } from "../auth";
@@ -17,14 +17,29 @@ export interface PharmacySearchHit {
 
 const querySchema = z.string().trim().min(2).max(80);
 
-/** Read-only search behind the pharmacy combobox — no audit row needed. */
+const zipSchema = z
+  .string()
+  .regex(/^\d{5}$/)
+  .nullish();
+
+/**
+ * Read-only search behind the pharmacy combobox — no audit row needed.
+ * With a client ZIP the results are scoped to that ZIP only.
+ */
 export async function searchPharmacies(
   query: string,
+  clientZip?: string | null,
 ): Promise<ActionResult<PharmacySearchHit[]>> {
   try {
     await requireRole();
     const q = querySchema.parse(query);
+    const zip = zipSchema.parse(clientZip ?? null);
     const pattern = `%${q}%`;
+    const textMatch = or(
+      ilike(pharmacies.name, pattern),
+      ilike(pharmacies.city, pattern),
+      ilike(pharmacies.zip, pattern),
+    );
     const rows = await getDb()
       .select({
         id: pharmacies.id,
@@ -35,13 +50,7 @@ export async function searchPharmacies(
         zip: pharmacies.zip,
       })
       .from(pharmacies)
-      .where(
-        or(
-          ilike(pharmacies.name, pattern),
-          ilike(pharmacies.city, pattern),
-          ilike(pharmacies.zip, pattern),
-        ),
-      )
+      .where(zip ? and(eq(pharmacies.zip, zip), textMatch) : textMatch)
       .orderBy(asc(pharmacies.name))
       .limit(20);
     return ok(rows);

@@ -1,5 +1,7 @@
 import { notFound } from "next/navigation";
+import { matchPolicyToPlan } from "@rxsr/core";
 import { getIntake } from "@/server/queries/intake";
+import { getPolicyPlanCandidates } from "@/server/queries/plans";
 import { IntakeReview, type IntakeReviewProps } from "./_components/intake-review";
 
 export const dynamic = "force-dynamic";
@@ -16,6 +18,10 @@ export default async function IntakeReviewPage({
   const currentYear = new Date().getFullYear();
   // AEP (October onward) work targets next plan year.
   const defaultPlanYear = new Date().getMonth() >= 9 ? currentYear + 1 : currentYear;
+
+  // Catalog plans for the year, so in-force policy text can be matched to a
+  // real plan (suggested here, confirmed by the agent before it counts).
+  const planCandidates = await getPolicyPlanCandidates(defaultPlanYear);
 
   const props: IntakeReviewProps = {
     clientId,
@@ -68,6 +74,17 @@ export default async function IntakeReviewPage({
       policyType: p.policyType,
       isCurrentDrugPlan: p.isCurrentDrugPlan,
       matchedPlanId: p.matchedPlanId,
+      suggestedPlanId:
+        p.policyType === "pdp" || p.policyType === "ma_pd"
+          ? (matchPolicyToPlan(
+              { rawText: p.rawText, carrierName: p.carrierName, policyNumber: p.policyNumber },
+              planCandidates,
+            )?.planId ?? null)
+          : null,
+    })),
+    planOptions: planCandidates.map((c) => ({
+      id: c.id,
+      label: `${c.carrierName} — ${c.name}`,
     })),
   };
 

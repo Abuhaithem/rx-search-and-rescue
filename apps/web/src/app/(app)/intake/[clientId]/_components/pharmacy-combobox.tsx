@@ -20,6 +20,8 @@ interface PharmacyComboboxProps {
   value: PharmacySelection;
   onChange: (selection: PharmacySelection) => void;
   invalid?: boolean;
+  /** Client ZIP — search results are scoped to it when present. */
+  clientZip?: string | null;
 }
 
 const SEARCH_DEBOUNCE_MS = 250;
@@ -29,7 +31,7 @@ const SEARCH_DEBOUNCE_MS = 250;
  * links the client to a real pharmacies row; the free-text escape hatch keeps
  * the typed name with no link (surfaces amber until resolved).
  */
-export function PharmacyCombobox({ value, onChange, invalid }: PharmacyComboboxProps) {
+export function PharmacyCombobox({ value, onChange, invalid, clientZip }: PharmacyComboboxProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<PharmacySearchHit[]>([]);
@@ -48,7 +50,7 @@ export function PharmacyCombobox({ value, onChange, invalid }: PharmacyComboboxP
     }
     debounce.current = setTimeout(() => {
       startSearch(async () => {
-        const result = await searchPharmacies(trimmed);
+        const result = await searchPharmacies(trimmed, clientZip ?? null);
         if (result.ok) {
           setHits(result.data);
           setSearched(true);

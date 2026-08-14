@@ -40,7 +40,13 @@ export default async function SelectPlansPage({
       planYear={comparison.analysis.planYear}
       pharmacyName={comparison.primaryPharmacy?.name ?? null}
       plans={plans}
-      initialSelected={comparison.plans.map((p) => p.plan.id)}
+      // Fresh analysis: the client's matched current plan starts selected so
+      // the comparison always has its "current plan" column.
+      initialSelected={
+        comparison.plans.length > 0
+          ? comparison.plans.map((p) => p.plan.id)
+          : plans.filter((p) => p.isCurrent).map((p) => p.planId)
+      }
       locked={
         comparison.analysis.status === "approved" || comparison.analysis.status === "delivered"
       }

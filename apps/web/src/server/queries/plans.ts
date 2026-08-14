@@ -221,6 +221,32 @@ export async function getPlanCatalog(planYear: number): Promise<PlanCatalogRow[]
   });
 }
 
+export interface PolicyPlanCandidateRow {
+  id: string;
+  name: string;
+  carrierName: string;
+  contractPlanId: string | null;
+}
+
+/** Catalog slice the in-force-policy matcher runs against (curated, one year). */
+export async function getPolicyPlanCandidates(
+  planYear: number,
+): Promise<PolicyPlanCandidateRow[]> {
+  const db = getDb();
+  const rows = await db.query.plans.findMany({
+    where: and(eq(plans.planYear, planYear), eq(plans.curated, true)),
+    columns: { id: true, name: true, contractPlanId: true },
+    with: { carrier: { columns: { name: true } } },
+    orderBy: (p, { asc }) => [asc(p.name)],
+  });
+  return rows.map((p) => ({
+    id: p.id,
+    name: p.name,
+    carrierName: p.carrier.name,
+    contractPlanId: p.contractPlanId,
+  }));
+}
+
 /** Shared with actions/analysis.ts (selectPlans availability validation). */
 export async function getCurrentDrugPlanId(clientId: string): Promise<string | null> {
   const db = getDb();

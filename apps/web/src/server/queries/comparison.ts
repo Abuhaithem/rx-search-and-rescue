@@ -553,7 +553,7 @@ export async function getComparablePharmacies(
     where: eq(analyses.id, analysisId),
     columns: { status: true, planYear: true },
     with: {
-      client: { columns: { state: true } },
+      client: { columns: { state: true, zip: true } },
       pharmacies: { columns: { pharmacyId: true } },
       plans: {
         with: { plan: { columns: { id: true, name: true, carrierId: true } } },
@@ -563,9 +563,16 @@ export async function getComparablePharmacies(
   });
   if (!analysis) return null;
 
+  // Scope to the client's ZIP; state, then everything, as fallbacks when the
+  // client record is incomplete.
   const state = analysis.client.state;
+  const zip = analysis.client.zip;
   const rows = await db.query.pharmacies.findMany({
-    where: state ? eq(pharmacies.state, state) : undefined,
+    where: zip
+      ? eq(pharmacies.zip, zip)
+      : state
+        ? eq(pharmacies.state, state)
+        : undefined,
     columns: { id: true, name: true, city: true, state: true, zip: true },
     orderBy: (p, { asc }) => [asc(p.name)],
   });
