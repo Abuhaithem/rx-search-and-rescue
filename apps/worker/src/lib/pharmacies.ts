@@ -3,8 +3,12 @@
  * pharmacies table is the only candidate source — rows enter it from carrier
  * files (pharmacy directories, xlsx network tabs) or manual admin entry.
  */
-import { ilike, pharmacies, type Db } from "@rxsr/db";
-import type { PharmacyCandidate } from "@rxsr/core/pharmacy";
+import { eq, ilike, pharmacies, pharmacyBrands, type Db } from "@rxsr/db";
+import {
+  derivePharmacyBrandName,
+  normalizePharmacyBrandName,
+  type PharmacyCandidate,
+} from "@rxsr/core/pharmacy";
 
 type PharmacyRow = typeof pharmacies.$inferSelect;
 
@@ -56,4 +60,31 @@ export function pharmacyResolutionPrompt(
     "Known pharmacies nearby:",
     ...lines,
   ].join("\n");
+}
+
+/**
+ * Get-or-create the brand row for a location name. onConflictDoNothing +
+ * re-select keeps concurrent ingest workers race-safe.
+ */
+export async function ensureBrandId(db: Db, pharmacyName: string): Promise<string | null> {
+  const normalized = normalizePharmacyBrandName(pharmacyName);
+  if (normalized === "") return null;
+  const [existing] = await db
+    .select({ id: pharmacyBrands.id })
+    .from(pharmacyBrands)
+    .where(eq(pharmacyBrands.normalizedName, normalized))
+    .limit(1);
+  if (existing) return existing.id;
+  const [inserted] = await db
+    .insert(pharmacyBrands)
+    .values({ name: derivePharmacyBrandName(pharmacyName), normalizedName: normalized })
+    .onConflictDoNothing()
+    .returning({ id: pharmacyBrands.id });
+  if (inserted) return inserted.id;
+  const [raced] = await db
+    .select({ id: pharmacyBrands.id })
+    .from(pharmacyBrands)
+    .where(eq(pharmacyBrands.normalizedName, normalized))
+    .limit(1);
+  return raced?.id ?? null;
 }

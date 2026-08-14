@@ -523,12 +523,16 @@ function buildCostMatrix(
 }
 
 export interface PharmacyOption {
+  /** The representative LOCATION's id — what selection and pricing use. */
   id: string;
+  /** Brand name when the location belongs to one, else the location name. */
   name: string;
   city: string | null;
   state: string | null;
   zip: string | null;
-  /** In the client's own ZIP — cards mark these and sort them first. */
+  /** Locations collapsed into this card (1 = independent / single store). */
+  locationCount: number;
+  /** Brand has a location in the client's ZIP — marked and sorted first. */
   inClientZip: boolean;
   /** Effective status per compared plan (override else carrier network). */
   statusByPlan: Record<string, NetworkStatus | null>;
@@ -572,7 +576,8 @@ export async function getComparablePharmacies(
   const rows = (
     await db.query.pharmacies.findMany({
       where: state ? eq(pharmacies.state, state) : undefined,
-      columns: { id: true, name: true, city: true, state: true, zip: true },
+      columns: { id: true, name: true, city: true, state: true, zip: true, brandId: true },
+      with: { brand: { columns: { id: true, name: true } } },
       orderBy: (p, { asc }) => [asc(p.name)],
     })
   ).sort((a, b) =>
@@ -630,18 +635,48 @@ export async function getComparablePharmacies(
     }
   }
 
-  const options: PharmacyOption[] = rows.map((row) => ({
-    ...row,
-    inClientZip: clientZip != null && row.zip === clientZip,
-    statusByPlan: Object.fromEntries(
-      comparedPlans.map((plan) => [
-        plan.id,
-        overrideByPlanPharmacy.get(`${plan.id}:${row.id}`) ??
-          statusByCarrierPharmacy.get(`${plan.carrierId}:${row.id}`) ??
-          null,
-      ]),
-    ),
-  }));
+  // One card per BRAND: a chain's locations collapse into a single option.
+  // rows arrive same-ZIP-first, so each group's first location is its
+  // representative — the concrete pharmacy the analysis actually prices.
+  // If a location of the brand is already on the analysis, that location
+  // stays the option's identity so toggling round-trips cleanly.
+  const selectedIdSet = new Set(analysis.pharmacies.map((p) => p.pharmacyId));
+  const groups = new Map<string, typeof rows>();
+  for (const row of rows) {
+    const key = row.brandId ?? `solo:${row.id}`;
+    const group = groups.get(key);
+    if (group) group.push(row);
+    else groups.set(key, [row]);
+  }
+
+  const statusFor = (plan: { id: string; carrierId: string }, pharmacyId: string) =>
+    overrideByPlanPharmacy.get(`${plan.id}:${pharmacyId}`) ??
+    statusByCarrierPharmacy.get(`${plan.carrierId}:${pharmacyId}`) ??
+    null;
+
+  const options: PharmacyOption[] = [...groups.values()].map((group) => {
+    const representative =
+      group.find((r) => selectedIdSet.has(r.id)) ?? group[0]!;
+    return {
+      id: representative.id,
+      name: representative.brand?.name ?? representative.name,
+      city: representative.city,
+      state: representative.state,
+      zip: representative.zip,
+      locationCount: group.length,
+      inClientZip: clientZip != null && group.some((r) => r.zip === clientZip),
+      statusByPlan: Object.fromEntries(
+        comparedPlans.map((plan) => [
+          plan.id,
+          // Representative first; any sibling location's status fills gaps
+          // (network files sometimes list only some stores of a chain).
+          statusFor(plan, representative.id) ??
+            group.map((r) => statusFor(plan, r.id)).find((s) => s != null) ??
+            null,
+        ]),
+      ),
+    };
+  });
 
   return {
     options,

@@ -152,6 +152,12 @@ export function PharmacyCards({
                       ) : null}
                     </div>
                     <div className="text-xs text-steel">
+                      {pharmacy.locationCount > 1 ? (
+                        <>
+                          <span className="text-data">{pharmacy.locationCount}</span> locations ·
+                          priced at{" "}
+                        </>
+                      ) : null}
                       {[pharmacy.city, pharmacy.state].filter(Boolean).join(", ")}
                       {pharmacy.zip ? (
                         <>

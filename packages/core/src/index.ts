@@ -5,4 +5,5 @@ export * from "./analysis/lis";
 export * from "./analysis/policy-match";
 export * from "./intake/contracts";
 export * from "./pharmacy/contracts";
+export * from "./pharmacy/brand";
 export * from "./report-model";

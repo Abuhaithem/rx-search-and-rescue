@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { ClipboardPaste, Loader2, X } from "lucide-react";
+import { derivePharmacyBrandName } from "@rxsr/core";
 import { importPharmacyList, type PharmacyImportRow } from "@/server/actions/pharmacies";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +16,7 @@ import { cn } from "@/lib/utils";
 interface EditableRow {
   key: number;
   name: string;
+  brand: string;
   address1: string;
   city: string;
   zip: string;
@@ -54,7 +56,9 @@ function parseLine(line: string): Omit<EditableRow, "key"> | null {
   const remaining = rest.filter((_, i) => i !== zipIndex);
   const city = remaining.length > 1 ? (remaining[remaining.length - 1] ?? "") : "";
   const address1 = remaining.slice(0, remaining.length > 1 ? -1 : undefined).join(", ");
-  return { name, address1, city, zip };
+  // Brand pre-derived from the name (store # / location suffix stripped) —
+  // editable, so chain families (Albertsons / Sav-On) can share one brand.
+  return { name, brand: derivePharmacyBrandName(name), address1, city, zip };
 }
 
 const HEADER_RE = /pharmacy|address|city|zip|store/i;
@@ -100,6 +104,7 @@ export function PastePharmacyList() {
       .filter((r) => r.name.trim().length >= 2 && ZIP_RE.test(r.zip))
       .map((r) => ({
         name: r.name.trim(),
+        brand: r.brand.trim() || derivePharmacyBrandName(r.name.trim()),
         address1: r.address1.trim() || null,
         city: r.city.trim() || null,
         zip: r.zip,
@@ -131,9 +136,10 @@ export function PastePharmacyList() {
         </h2>
         <p className="text-sm text-steel">
           Columns: <span className="font-semibold">Pharmacy (store # if any) · Address · City ·
-          ZIP</span> — copied straight from Excel or Sheets (tab-separated). Review and correct
-          the rows below before importing; re-importing the same list updates addresses instead
-          of duplicating.
+          ZIP</span> — copied straight from Excel or Sheets (tab-separated). The Brand column is
+          derived automatically (store number stripped) and groups a chain&apos;s locations into
+          one entity — edit it to merge families like Albertsons and Sav-On under a single brand.
+          Re-importing the same list updates addresses instead of duplicating.
         </p>
       </div>
 
@@ -170,6 +176,7 @@ export function PastePharmacyList() {
               <THead>
                 <TRow>
                   <TH>Pharmacy</TH>
+                  <TH>Brand</TH>
                   <TH>Address</TH>
                   <TH>City</TH>
                   <TH className="w-24">ZIP</TH>
@@ -185,6 +192,14 @@ export function PastePharmacyList() {
                         className={cn("h-8", row.name.trim().length < 2 && "border-notcovered")}
                         value={row.name}
                         onChange={(e) => patch(row.key, "name", e.target.value)}
+                      />
+                    </TCell>
+                    <TCell className="px-1.5 py-1">
+                      <Input
+                        aria-label="Brand"
+                        className="h-8 w-40"
+                        value={row.brand}
+                        onChange={(e) => patch(row.key, "brand", e.target.value)}
                       />
                     </TCell>
                     <TCell className="px-1.5 py-1">

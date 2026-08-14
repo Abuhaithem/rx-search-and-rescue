@@ -10,7 +10,7 @@ import { and, carrierPharmacyNetworks, eq, pharmacies, sql } from "@rxsr/db";
 import { matchPharmacy, type ParsedPharmacyText } from "@rxsr/core/pharmacy";
 import type { PharmacyDirectoryJob } from "../queues";
 import { markJobDone, markJobFailed, markJobRunning, updateJobProgress } from "../lib/db";
-import { candidateFromPharmacyRow, loadZipCandidates } from "../lib/pharmacies";
+import { candidateFromPharmacyRow, ensureBrandId, loadZipCandidates } from "../lib/pharmacies";
 import { createJobDeps, type JobDeps } from "./deps";
 
 const PAGES_PER_CHUNK = 4;
@@ -90,6 +90,7 @@ export async function runPharmacyDirectory(
               .insert(pharmacies)
               .values({
                 name: row.pharmacyName,
+                brandId: await ensureBrandId(db, row.pharmacyName),
                 address1: row.address,
                 zip,
                 source: "directory",

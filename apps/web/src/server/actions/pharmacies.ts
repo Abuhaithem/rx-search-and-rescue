@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { and, asc, eq, ilike, inArray, or, sql } from "drizzle-orm";
-import { getDb, pharmacies } from "@rxsr/db";
+import { getDb, pharmacies, pharmacyBrands } from "@rxsr/db";
 import { err, errorMessage, ok, type ActionResult } from "../action-result";
 import { requireRole } from "../auth";
 import { writeAudit } from "../audit";
@@ -71,6 +71,11 @@ const importRowSchema = z.object({
   address1: z.string().trim().max(200).nullable(),
   city: z.string().trim().max(100).nullable(),
   zip: z.string().regex(/^\d{5}$/),
+  /**
+   * Chain/brand the location belongs to. Prefilled by derivation in the UI,
+   * editable so families like Albertsons/Sav-On can share one brand.
+   */
+  brand: z.string().trim().min(2).max(200),
 });
 export type PharmacyImportRow = z.infer<typeof importRowSchema>;
 
@@ -121,8 +126,31 @@ export async function importPharmacyList(
     let inserted = 0;
     let updated = 0;
     await db.transaction(async (tx) => {
+      // Get-or-create every brand the pasted rows name, in one round trip.
+      const brandNames = new Map<string, string>(); // normalized → display
+      for (const row of uniqueRows) {
+        brandNames.set(row.brand.toLowerCase(), row.brand);
+      }
+      const normalizedNames = [...brandNames.keys()];
+      const existingBrands = await tx
+        .select({ id: pharmacyBrands.id, normalizedName: pharmacyBrands.normalizedName })
+        .from(pharmacyBrands)
+        .where(inArray(pharmacyBrands.normalizedName, normalizedNames));
+      const brandIdByNormalized = new Map(
+        existingBrands.map((b) => [b.normalizedName, b.id]),
+      );
+      const missing = normalizedNames.filter((n) => !brandIdByNormalized.has(n));
+      if (missing.length > 0) {
+        const insertedBrands = await tx
+          .insert(pharmacyBrands)
+          .values(missing.map((n) => ({ name: brandNames.get(n)!, normalizedName: n })))
+          .returning({ id: pharmacyBrands.id, normalizedName: pharmacyBrands.normalizedName });
+        for (const b of insertedBrands) brandIdByNormalized.set(b.normalizedName, b.id);
+      }
+
       const toInsert: (typeof pharmacies.$inferInsert)[] = [];
       for (const row of uniqueRows) {
+        const brandId = brandIdByNormalized.get(row.brand.toLowerCase()) ?? null;
         const existingId = existingByKey.get(`${row.name.toLowerCase()}|${row.zip}`);
         if (existingId) {
           await tx
@@ -131,12 +159,14 @@ export async function importPharmacyList(
               address1: row.address1,
               city: row.city,
               state: input.state,
+              brandId,
             })
             .where(eq(pharmacies.id, existingId));
           updated += 1;
         } else {
           toInsert.push({
             name: row.name,
+            brandId,
             address1: row.address1,
             city: row.city,
             state: input.state,

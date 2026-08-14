@@ -374,12 +374,26 @@ export const zipCounties = pgTable(
 
 // ─── Pharmacies ──────────────────────────────────────────────────────────────
 
+/**
+ * One row per chain/brand ("Walgreens Pharmacy") — locations reference it.
+ * Independents get a single-location brand, so grouping is uniform.
+ */
+export const pharmacyBrands = pgTable("pharmacy_brands", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  /** Lowercased derived name — see @rxsr/core pharmacy/brand. */
+  normalizedName: text("normalized_name").notNull().unique(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const pharmacies = pgTable(
   "pharmacies",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     npi: text("npi").unique(),
     name: text("name").notNull(),
+    /** Chain/brand this location belongs to; null only on unbackfilled rows. */
+    brandId: uuid("brand_id").references(() => pharmacyBrands.id),
     /** DBA / storefront names — what clients actually write on RxC forms. */
     altNames: text("alt_names").array().notNull().default([]),
     address1: text("address1"),
@@ -676,7 +690,15 @@ export const planTierCostsRelations = relations(planTierCosts, ({ one }) => ({
   plan: one(plans, { fields: [planTierCosts.planId], references: [plans.id] }),
 }));
 
-export const pharmaciesRelations = relations(pharmacies, ({ many }) => ({
+export const pharmacyBrandsRelations = relations(pharmacyBrands, ({ many }) => ({
+  locations: many(pharmacies),
+}));
+
+export const pharmaciesRelations = relations(pharmacies, ({ one, many }) => ({
+  brand: one(pharmacyBrands, {
+    fields: [pharmacies.brandId],
+    references: [pharmacyBrands.id],
+  }),
   planNetworks: many(planPharmacyNetworks),
   analysisPharmacies: many(analysisPharmacies),
 }));
