@@ -7,6 +7,7 @@ import type { FormularyPage, RxcExtraction } from "@rxsr/core/intake";
 import type {
   DrugResolutionExtraction,
   FormularyLegendExtraction,
+  PharmacyRosterExtraction,
   FormularyPlanNamesExtraction,
   PharmacyDirectoryExtraction,
   PharmacyResolution,
@@ -74,6 +75,11 @@ export interface ExtractionProvider {
     promptText: string,
     options?: ExtractionCallOptions,
   ): Promise<DrugResolutionExtraction>;
+  /** Active pharmacy locations from a statewide roster text chunk. */
+  extractPharmacyRosterRows(
+    rosterText: string,
+    options?: ExtractionCallOptions,
+  ): Promise<PharmacyRosterExtraction>;
 }
 
 export type {

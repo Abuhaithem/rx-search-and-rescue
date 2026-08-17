@@ -1,16 +1,27 @@
 /**
  * Plan pharmacy directory ingest: text-layer extraction (directories are
- * text-heavy tables), Claude row extraction per page chunk, deterministic
- * matching against the pharmacies table, and carrier_pharmacy_networks
- * upserts with source "directory" — the network belongs to the CARRIER and
- * covers all of its plans. Directory rows with no DB match CREATE the
- * pharmacies row — carrier files are the source of pharmacy truth.
+ * text-heavy tables), LLM row extraction per page chunk, then MAPPING onto
+ * the master pharmacy list: deterministic scorer first, LLM candidate
+ * resolution when the scorer is unsure, and only then — for pharmacies the
+ * master list genuinely lacks — a new row is created (with its brand).
+ * carrier_pharmacy_networks upserts carry source "directory"; the network
+ * belongs to the CARRIER and covers all of its plans.
  */
 import { and, carrierPharmacyNetworks, eq, pharmacies, sql } from "@rxsr/db";
 import { matchPharmacy, type ParsedPharmacyText } from "@rxsr/core/pharmacy";
 import type { PharmacyDirectoryJob } from "../queues";
-import { markJobDone, markJobFailed, markJobRunning, updateJobProgress } from "../lib/db";
-import { candidateFromPharmacyRow, ensureBrandId, loadZipCandidates } from "../lib/pharmacies";
+import {
+  markJobDone,
+  markJobFailed,
+  markJobRunning,
+  updateJobProgress,
+} from "../lib/db";
+import {
+  candidateFromPharmacyRow,
+  ensureBrandId,
+  loadZipCandidates,
+  pharmacyResolutionPrompt,
+} from "../lib/pharmacies";
 import { createJobDeps, type JobDeps } from "./deps";
 
 const PAGES_PER_CHUNK = 4;
@@ -24,7 +35,9 @@ export async function runPharmacyDirectory(
   const { db } = deps;
   await markJobRunning(db, job.ingestionJobId);
   try {
-    await updateJobProgress(db, job.ingestionJobId, { message: "Downloading directory PDF" });
+    await updateJobProgress(db, job.ingestionJobId, {
+      message: "Downloading directory PDF",
+    });
     const pdfBytes = await deps.storage.download(job.storagePath);
     const textLayer = await deps.pdf.extractPageTexts(pdfBytes);
 
@@ -32,7 +45,11 @@ export async function runPharmacyDirectory(
     let skipped = 0;
     let unspecified = 0;
 
-    for (let start = 0; start < textLayer.totalPages; start += PAGES_PER_CHUNK) {
+    for (
+      let start = 0;
+      start < textLayer.totalPages;
+      start += PAGES_PER_CHUNK
+    ) {
       const end = Math.min(start + PAGES_PER_CHUNK, textLayer.totalPages);
       await updateJobProgress(db, job.ingestionJobId, {
         page: end,
@@ -46,7 +63,8 @@ export async function runPharmacyDirectory(
         .join("\n\n");
       if (chunkText.trim() === "") continue;
 
-      const { rows } = await deps.extractor.extractPharmacyDirectoryRows(chunkText);
+      const { rows } =
+        await deps.extractor.extractPharmacyDirectoryRows(chunkText);
 
       for (const row of rows) {
         const zip = row.zip?.slice(0, 5) ?? null;
@@ -62,8 +80,10 @@ export async function runPharmacyDirectory(
           zip,
           raw: `${row.pharmacyName} ${row.address ?? ""} ${zip}`.trim(),
         };
-        const dbRows = await loadZipCandidates(db, zip);
-        const best = matchPharmacy(parsed, dbRows.map(candidateFromPharmacyRow))[0];
+        const candidates = (await loadZipCandidates(db, zip)).map(
+          candidateFromPharmacyRow,
+        );
+        const best = matchPharmacy(parsed, candidates)[0];
 
         // Carriers name cost-share tiers inconsistently; "unspecified" means the
         // directory listed the pharmacy in-network with no tier language. Map it
@@ -75,32 +95,62 @@ export async function runPharmacyDirectory(
         if (best && best.score >= DIRECTORY_LINK_THRESHOLD) {
           pharmacyId = best.candidate.id;
         } else {
-          // Unknown pharmacy: the directory row itself is the record of truth.
-          // Exact-match guard keeps re-ingests from planting duplicates when
-          // the fuzzy matcher scores below the link threshold.
-          const [existing] = await db
-            .select({ id: pharmacies.id })
-            .from(pharmacies)
-            .where(and(eq(pharmacies.name, row.pharmacyName), eq(pharmacies.zip, zip)))
-            .limit(1);
-          if (existing) {
-            pharmacyId = existing.id;
-          } else {
-            const [inserted] = await db
-              .insert(pharmacies)
-              .values({
-                name: row.pharmacyName,
-                brandId: await ensureBrandId(db, row.pharmacyName),
-                address1: row.address,
-                zip,
-                source: "directory",
-              })
-              .returning({ id: pharmacies.id });
-            if (!inserted) {
-              skipped += 1;
-              continue;
+          // The scorer is unsure → let the LLM pick among master-list
+          // candidates (it can link, never invent) before we consider the
+          // pharmacy genuinely new.
+          let resolvedId: string | null = null;
+          if (candidates.length > 0) {
+            const capped = candidates.slice(0, 40);
+            const resolution = await deps.extractor
+              .resolvePharmacyCandidate(
+                pharmacyResolutionPrompt(parsed.raw, zip, capped),
+              )
+              .catch(() => null);
+            const index = resolution?.matchedIndex;
+            if (
+              resolution &&
+              index != null &&
+              index >= 0 &&
+              index < capped.length
+            ) {
+              resolvedId = capped[index]!.id;
             }
-            pharmacyId = inserted.id;
+          }
+          if (resolvedId) {
+            pharmacyId = resolvedId;
+          } else {
+            // Unknown pharmacy: the directory row itself is the record of truth.
+            // Exact-match guard keeps re-ingests from planting duplicates when
+            // the fuzzy matcher scores below the link threshold.
+            const [existing] = await db
+              .select({ id: pharmacies.id })
+              .from(pharmacies)
+              .where(
+                and(
+                  eq(pharmacies.name, row.pharmacyName),
+                  eq(pharmacies.zip, zip),
+                ),
+              )
+              .limit(1);
+            if (existing) {
+              pharmacyId = existing.id;
+            } else {
+              const [inserted] = await db
+                .insert(pharmacies)
+                .values({
+                  name: row.pharmacyName,
+                  brandId: await ensureBrandId(db, row.pharmacyName),
+                  address1: row.address,
+                  zip,
+                  source: "directory",
+                })
+                .returning({ id: pharmacies.id });
+              if (!inserted) {
+                skipped += 1;
+                continue;
+              }
+              pharmacyId = inserted.id;
+            }
           }
         }
         await db

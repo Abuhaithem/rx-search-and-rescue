@@ -1,8 +1,10 @@
-import { sql } from "drizzle-orm";
-import { getDb, pharmacies } from "@rxsr/db";
+import { desc, eq, sql } from "drizzle-orm";
+import { getDb, ingestionJobs, pharmacies } from "@rxsr/db";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/domain/page-header";
+import { RefreshPoller } from "../formularies/_components/refresh-poller";
 import { PastePharmacyList } from "./_components/paste-pharmacy-list";
+import { RosterUpload } from "./_components/roster-upload";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +18,18 @@ export default async function PharmaciesAdminPage() {
     .from(pharmacies)
     .groupBy(pharmacies.state)
     .orderBy(sql`count(*) desc`);
+
+  const [rosterJob] = await db
+    .select({
+      status: ingestionJobs.status,
+      message: sql<string | null>`${ingestionJobs.progress} ->> 'message'`,
+      error: ingestionJobs.error,
+    })
+    .from(ingestionJobs)
+    .where(eq(ingestionJobs.kind, "pharmacy_roster"))
+    .orderBy(desc(ingestionJobs.createdAt))
+    .limit(1);
+  const rosterRunning = rosterJob?.status === "queued" || rosterJob?.status === "running";
 
   return (
     <div className="space-y-6">
@@ -42,6 +56,28 @@ export default async function PharmaciesAdminPage() {
           ))
         )}
       </section>
+
+      <Card>
+        <CardContent className="space-y-3 p-6">
+          <RefreshPoller active={rosterRunning} />
+          <RosterUpload />
+          {rosterJob ? (
+            <p
+              className={`rounded-card px-4 py-2.5 text-sm ${
+                rosterJob.status === "failed"
+                  ? "bg-notcovered-soft text-notcovered"
+                  : "bg-fog text-steel"
+              }`}
+            >
+              {rosterJob.status === "failed"
+                ? `Roster import failed: ${rosterJob.error ?? "unknown error"}`
+                : rosterRunning
+                  ? `${rosterJob.message ?? "Processing roster…"} — this page refreshes itself.`
+                  : (rosterJob.message ?? "Last roster import finished.")}
+            </p>
+          ) : null}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardContent className="p-6">

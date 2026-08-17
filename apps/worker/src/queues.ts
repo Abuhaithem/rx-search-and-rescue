@@ -7,6 +7,7 @@ export const QUEUE_NAMES = {
   formularyIngest: "formulary-ingest",
   rxcIntake: "rxc-intake",
   pharmacyDirectory: "pharmacy-directory",
+  pharmacyRoster: "pharmacy-roster",
   xlsxImport: "xlsx-import",
   sobIngest: "sob-ingest",
   reportPdf: "report-pdf",
@@ -40,6 +41,14 @@ export interface PharmacyDirectoryJob {
   storagePath: string;
   /** Wizard staging: rows land invisible until Finalize. */
   staged?: boolean;
+}
+
+export interface PharmacyRosterJob {
+  ingestionJobId: string;
+  /** Object-storage key of the uploaded roster PDF. */
+  storagePath: string;
+  /** Two-letter state the roster covers, e.g. "ID". */
+  state: string;
 }
 
 export interface SobIngestJob {

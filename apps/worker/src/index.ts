@@ -39,6 +39,14 @@ async function main() {
       { connection, concurrency: 1 },
     ),
     new Worker(
+      QUEUE_NAMES.pharmacyRoster,
+      async (job) => {
+        const { runPharmacyRoster } = await import("./jobs/pharmacy-roster");
+        return runPharmacyRoster(job.data);
+      },
+      { connection, concurrency: 1 },
+    ),
+    new Worker(
       QUEUE_NAMES.reportPdf,
       async (job) => {
         const { runReportPdf } = await import("./jobs/report-pdf");

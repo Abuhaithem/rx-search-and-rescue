@@ -67,6 +67,20 @@ export const quantityLimitPageSchema = z.object({
 });
 export type QuantityLimitPageExtraction = z.infer<typeof quantityLimitPageSchema>;
 
+export const pharmacyRosterSchema = z.object({
+  rows: z.array(
+    z.object({
+      /** Storefront name verbatim, store # included ("Walgreens Pharmacy #10603"). */
+      name: z.string().min(1),
+      address: z.string().nullable(),
+      city: z.string().nullable(),
+      /** 5-digit ZIP; rows without one are skipped downstream. */
+      zip: z.string().nullable(),
+    }),
+  ),
+});
+export type PharmacyRosterExtraction = z.infer<typeof pharmacyRosterSchema>;
+
 export const drugResolutionSchema = z.object({
   items: z.array(
     z.object({
@@ -344,6 +358,28 @@ const DIRECTORY_JSON_SCHEMA: JsonObjectSchema = {
   },
 };
 
+const PHARMACY_ROSTER_JSON_SCHEMA: JsonObjectSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["rows"],
+  properties: {
+    rows: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["name", "address", "city", "zip"],
+        properties: {
+          name: { type: "string", minLength: 1 },
+          address: { type: ["string", "null"] },
+          city: { type: ["string", "null"] },
+          zip: { type: ["string", "null"], pattern: "^\\d{5}" },
+        },
+      },
+    },
+  },
+};
+
 const DRUG_RESOLUTION_JSON_SCHEMA: JsonObjectSchema = {
   type: "object",
   additionalProperties: false,
@@ -575,6 +611,23 @@ Classify network status — carriers use DIFFERENT vocabulary for the same two t
 Always copy the document's verbatim cost-share wording into statusLabel (null when there is none). Never invent rows.`,
   jsonSchema: DIRECTORY_JSON_SCHEMA,
   parse: (input) => pharmacyDirectoryExtractionSchema.parse(input),
+};
+
+/**
+ * Statewide pharmacy roster (the master-list source document): one row per
+ * ACTIVE pharmacy location. Defunct/closed sections must not import.
+ */
+export const pharmacyRosterSpec: ExtractionSpec<PharmacyRosterExtraction> = {
+  toolName: "record_pharmacy_roster_rows",
+  description: "Record active pharmacy locations from a statewide roster document.",
+  systemPrompt: `You extract pharmacy locations from a statewide pharmacy roster/directory. For each ACTIVE pharmacy row in the provided text, record: name verbatim including any store number ("Walgreens Pharmacy #10603"), street address (null if not stated or marked unverified with a dagger †), city, and 5-digit ZIP.
+Rules:
+- Extract ONLY from tables of active pharmacies. Skip sections listing closed, defunct, or excluded locations (e.g. "Chain closed", "Store closed"), prose, statistics, and instructions.
+- A row without a 5-digit ZIP is not a usable location — omit it.
+- Strip footnote markers (†, *) from values.
+- Never invent locations; copy exactly what is printed.`,
+  jsonSchema: PHARMACY_ROSTER_JSON_SCHEMA,
+  parse: (input) => pharmacyRosterSchema.parse(input),
 };
 
 /**

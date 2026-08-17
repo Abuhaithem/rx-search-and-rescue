@@ -13,6 +13,7 @@ import {
   formularyPageUserText,
   formularyPlanNamesSpec,
   pharmacyDirectorySpec,
+  pharmacyRosterSpec,
   drugResolutionSpec,
   pharmacyResolutionSpec,
   quantityLimitPageSpec,
@@ -207,6 +208,14 @@ export function createOpenAIProvider(deps: OpenAIProviderDeps = {}): ExtractionP
       return run(
         drugResolutionSpec,
         [{ type: "input_text", text: promptText }],
+        options?.model ?? model,
+      );
+    },
+
+    async extractPharmacyRosterRows(rosterText, options) {
+      return run(
+        pharmacyRosterSpec,
+        [{ type: "input_text", text: rosterText }],
         options?.model ?? model,
       );
     },

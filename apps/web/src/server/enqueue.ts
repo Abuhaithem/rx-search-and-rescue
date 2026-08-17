@@ -7,6 +7,7 @@ export const QUEUE_NAMES = {
   formularyIngest: "formulary-ingest",
   rxcIntake: "rxc-intake",
   pharmacyDirectory: "pharmacy-directory",
+  pharmacyRoster: "pharmacy-roster",
   xlsxImport: "xlsx-import",
   sobIngest: "sob-ingest",
   reportPdf: "report-pdf",
@@ -19,6 +20,7 @@ export type IngestionKind =
   | "formulary"
   | "rxc"
   | "pharmacy_directory"
+  | "pharmacy_roster"
   | "xlsx_import"
   | "sob"
   | "report_pdf"

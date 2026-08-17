@@ -15,6 +15,7 @@ import {
   formularyPageUserText,
   formularyPlanNamesSpec,
   pharmacyDirectorySpec,
+  pharmacyRosterSpec,
   drugResolutionSpec,
   pharmacyResolutionSpec,
   quantityLimitPageSpec,
@@ -198,6 +199,15 @@ export function createAnthropicProvider(
       return run(
         drugResolutionSpec,
         [{ type: "text", text: promptText }],
+        options?.model ?? model,
+        false,
+      );
+    },
+
+    async extractPharmacyRosterRows(rosterText, options) {
+      return run(
+        pharmacyRosterSpec,
+        [{ type: "text", text: rosterText }],
         options?.model ?? model,
         false,
       );

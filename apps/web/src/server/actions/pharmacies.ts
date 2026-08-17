@@ -1,5 +1,6 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { and, asc, eq, ilike, inArray, or, sql } from "drizzle-orm";
@@ -7,6 +8,8 @@ import { getDb, pharmacies, pharmacyBrands } from "@rxsr/db";
 import { err, errorMessage, ok, type ActionResult } from "../action-result";
 import { requireRole } from "../auth";
 import { writeAudit } from "../audit";
+import { uploadObject } from "../storage";
+import { enqueueIngestionJob, QUEUE_NAMES } from "../enqueue";
 
 export interface PharmacySearchHit {
   id: string;
@@ -189,6 +192,54 @@ export async function importPharmacyList(
 
     revalidatePath("/", "layout");
     return ok({ inserted, updated });
+  } catch (e) {
+    return err(errorMessage(e));
+  }
+}
+
+const MAX_ROSTER_BYTES = 25 * 1024 * 1024;
+
+/**
+ * formData: pdf — a statewide pharmacy roster. The worker extracts active
+ * locations (AI at ingestion time) and upserts them into the master list.
+ */
+export async function uploadPharmacyRoster(
+  state: string,
+  formData: FormData,
+): Promise<ActionResult<{ ingestionJobId: string }>> {
+  try {
+    const profile = await requireRole("admin", "manager");
+    const stateCode = z
+      .string()
+      .trim()
+      .toUpperCase()
+      .regex(/^[A-Z]{2}$/)
+      .parse(state);
+
+    const file = formData.get("pdf") ?? formData.get("file");
+    if (!(file instanceof File) || file.size === 0) throw new Error("A PDF file is required");
+    const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+    if (!isPdf) throw new Error("Only PDF files are accepted");
+    if (file.size > MAX_ROSTER_BYTES) throw new Error("PDF exceeds the 25 MB limit");
+
+    const storagePath = `pharmacy-rosters/${randomUUID()}.pdf`;
+    await uploadObject(storagePath, new Uint8Array(await file.arrayBuffer()), "application/pdf");
+
+    const { ingestionJobId } = await enqueueIngestionJob({
+      kind: "pharmacy_roster",
+      queue: QUEUE_NAMES.pharmacyRoster,
+      payload: (jobId) => ({ ingestionJobId: jobId, storagePath, state: stateCode }),
+    });
+
+    await writeAudit(getDb(), {
+      actorId: profile.id,
+      action: "pharmacy.roster_uploaded",
+      entityType: "pharmacy_list",
+      meta: { state: stateCode, fileName: file.name, storagePath, ingestionJobId },
+    });
+
+    revalidatePath("/", "layout");
+    return ok({ ingestionJobId });
   } catch (e) {
     return err(errorMessage(e));
   }

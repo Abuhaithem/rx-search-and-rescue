@@ -133,6 +133,9 @@ function fakeProvider(): { provider: ExtractionProvider; calls: string[] } {
     async resolveDrugNames() {
       return { items: [] };
     },
+    async extractPharmacyRosterRows() {
+      throw new Error("not used");
+    },
   } satisfies ExtractionProvider;
   return { provider, calls };
 }
