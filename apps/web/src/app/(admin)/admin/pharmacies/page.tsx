@@ -64,25 +64,6 @@ export default async function PharmaciesAdminPage() {
         description="The master pharmacy list. Every carrier network, pharmacy picker, and intake match resolves against these rows — one list, referenced everywhere."
       />
 
-      <section className="flex flex-wrap gap-3">
-        {counts.length === 0 ? (
-          <p className="text-sm text-steel">
-            No pharmacies on file yet — paste your first list below.
-          </p>
-        ) : (
-          counts.map((row) => (
-            <Card key={row.state ?? "none"}>
-              <CardContent className="space-y-0.5 px-5 py-3">
-                <p className="text-eyebrow">{row.state ?? "No state"}</p>
-                <p className="text-data text-xl font-semibold text-deepwater">
-                  {row.count.toLocaleString()}
-                </p>
-              </CardContent>
-            </Card>
-          ))
-        )}
-      </section>
-
       <Card>
         <CardContent className="space-y-3 p-6">
           <RefreshPoller active={rosterRunning} />
@@ -111,7 +92,7 @@ export default async function PharmaciesAdminPage() {
         </CardContent>
       </Card>
 
-      <PharmacyTable rows={tableRows} />
+      <PharmacyTable rows={tableRows} stateCounts={counts} />
     </div>
   );
 }

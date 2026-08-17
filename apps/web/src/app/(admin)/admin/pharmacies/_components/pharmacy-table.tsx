@@ -35,24 +35,35 @@ export interface PharmacyTableRow {
 
 const VISIBLE_STEP = 150;
 
-export function PharmacyTable({ rows }: { rows: PharmacyTableRow[] }) {
+export function PharmacyTable({
+  rows,
+  stateCounts,
+}: {
+  rows: PharmacyTableRow[];
+  /** Per-state totals; null state = rows with no state set. */
+  stateCounts: { state: string | null; count: number }[];
+}) {
   const router = useRouter();
   const [query, setQuery] = useState("");
+  const [stateFilter, setStateFilter] = useState<string | null | "all">("all");
   const [visibleCount, setVisibleCount] = useState(VISIBLE_STEP);
   const [editing, setEditing] = useState<PharmacyTableRow | null>(null);
   const [removing, setRemoving] = useState<PharmacyTableRow | null>(null);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter(
-      (r) =>
+    return rows.filter((r) => {
+      if (stateFilter !== "all" && r.state !== stateFilter) return false;
+      if (q === "") return true;
+      return (
         r.name.toLowerCase().includes(q) ||
         (r.brandName ?? "").toLowerCase().includes(q) ||
         (r.city ?? "").toLowerCase().includes(q) ||
-        (r.zip ?? "").includes(q),
-    );
-  }, [rows, query]);
+        (r.state ?? "").toLowerCase() === q ||
+        (r.zip ?? "").includes(q)
+      );
+    });
+  }, [rows, query, stateFilter]);
   const visible = filtered.slice(0, visibleCount);
 
   return (
@@ -69,11 +80,47 @@ export function PharmacyTable({ rows }: { rows: PharmacyTableRow[] }) {
               setQuery(e.target.value);
               setVisibleCount(VISIBLE_STEP);
             }}
-            placeholder="Filter by name, brand, city, or ZIP…"
+            placeholder="Filter by name, brand, city, state, or ZIP…"
             className="w-72 pl-8"
           />
         </div>
       </div>
+
+      {stateCounts.length > 0 ? (
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            onClick={() => {
+              setStateFilter("all");
+              setVisibleCount(VISIBLE_STEP);
+            }}
+            className={`rounded-chip px-2.5 py-1 font-mono text-[11px] font-semibold uppercase tracking-[0.08em] transition-colors ${
+              stateFilter === "all"
+                ? "bg-harbor text-white"
+                : "bg-fog text-steel hover:bg-mist/60"
+            }`}
+          >
+            All states
+          </button>
+          {stateCounts.map((entry) => (
+            <button
+              key={entry.state ?? "none"}
+              type="button"
+              onClick={() => {
+                setStateFilter(entry.state);
+                setVisibleCount(VISIBLE_STEP);
+              }}
+              className={`rounded-chip px-2.5 py-1 font-mono text-[11px] font-semibold uppercase tracking-[0.08em] transition-colors ${
+                stateFilter === entry.state
+                  ? "bg-harbor text-white"
+                  : "bg-fog text-steel hover:bg-mist/60"
+              }`}
+            >
+              {entry.state ?? "No state"} · {entry.count.toLocaleString()}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       {filtered.length === 0 ? (
         <p className="rounded-card border border-dashed border-mist bg-white px-6 py-8 text-center text-sm text-steel">
@@ -90,6 +137,7 @@ export function PharmacyTable({ rows }: { rows: PharmacyTableRow[] }) {
                 <TH>Brand</TH>
                 <TH>Address</TH>
                 <TH>City</TH>
+                <TH className="w-16">State</TH>
                 <TH className="w-20">ZIP</TH>
                 <TH className="w-24">Source</TH>
                 <TH className="w-24" aria-label="Actions" />
@@ -101,10 +149,8 @@ export function PharmacyTable({ rows }: { rows: PharmacyTableRow[] }) {
                   <TCell className="text-sm font-semibold text-deepwater">{row.name}</TCell>
                   <TCell className="text-sm text-steel">{row.brandName ?? "—"}</TCell>
                   <TCell className="text-sm text-steel">{row.address1 ?? "—"}</TCell>
-                  <TCell className="text-sm text-steel">
-                    {row.city ?? "—"}
-                    {row.state ? `, ${row.state}` : ""}
-                  </TCell>
+                  <TCell className="text-sm text-steel">{row.city ?? "—"}</TCell>
+                  <TCell className="text-data text-sm">{row.state ?? "—"}</TCell>
                   <TCell className="text-data text-sm">{row.zip ?? "—"}</TCell>
                   <TCell className="font-mono text-[11px] uppercase tracking-[0.08em] text-steel">
                     {row.source}
