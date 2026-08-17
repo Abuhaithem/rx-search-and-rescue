@@ -1,9 +1,10 @@
-import { desc, eq, sql } from "drizzle-orm";
+import { asc, desc, eq, sql } from "drizzle-orm";
 import { getDb, ingestionJobs, pharmacies } from "@rxsr/db";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/domain/page-header";
 import { RefreshPoller } from "../formularies/_components/refresh-poller";
 import { PastePharmacyList } from "./_components/paste-pharmacy-list";
+import { PharmacyTable, type PharmacyTableRow } from "./_components/pharmacy-table";
 import { RosterUpload } from "./_components/roster-upload";
 
 export const dynamic = "force-dynamic";
@@ -30,6 +31,31 @@ export default async function PharmaciesAdminPage() {
     .orderBy(desc(ingestionJobs.createdAt))
     .limit(1);
   const rosterRunning = rosterJob?.status === "queued" || rosterJob?.status === "running";
+
+  const listRows = await db.query.pharmacies.findMany({
+    columns: {
+      id: true,
+      name: true,
+      address1: true,
+      city: true,
+      state: true,
+      zip: true,
+      source: true,
+    },
+    with: { brand: { columns: { name: true } } },
+    orderBy: (p) => [asc(p.name)],
+    limit: 3000,
+  });
+  const tableRows: PharmacyTableRow[] = listRows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    brandName: row.brand?.name ?? null,
+    address1: row.address1,
+    city: row.city,
+    state: row.state,
+    zip: row.zip,
+    source: row.source,
+  }));
 
   return (
     <div className="space-y-6">
@@ -84,6 +110,8 @@ export default async function PharmaciesAdminPage() {
           <PastePharmacyList />
         </CardContent>
       </Card>
+
+      <PharmacyTable rows={tableRows} />
     </div>
   );
 }

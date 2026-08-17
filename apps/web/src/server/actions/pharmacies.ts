@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { and, asc, eq, ilike, inArray, or, sql } from "drizzle-orm";
-import { getDb, pharmacies, pharmacyBrands } from "@rxsr/db";
+import { clientPharmacies, getDb, pharmacies, pharmacyBrands } from "@rxsr/db";
 import { err, errorMessage, ok, type ActionResult } from "../action-result";
 import { requireRole } from "../auth";
 import { writeAudit } from "../audit";
@@ -240,6 +240,125 @@ export async function uploadPharmacyRoster(
 
     revalidatePath("/", "layout");
     return ok({ ingestionJobId });
+  } catch (e) {
+    return err(errorMessage(e));
+  }
+}
+
+const pharmacyUuidSchema = z.string().uuid();
+
+const pharmacyPatchSchema = z.object({
+  name: z.string().trim().min(2).max(200),
+  /** Brand display name; created on first use. */
+  brand: z.string().trim().min(2).max(200),
+  address1: z.string().trim().max(200).nullable(),
+  city: z.string().trim().max(100).nullable(),
+  state: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^[A-Z]{2}$/)
+    .nullable(),
+  zip: z
+    .string()
+    .regex(/^\d{5}$/)
+    .nullable(),
+});
+export type PharmacyPatch = z.infer<typeof pharmacyPatchSchema>;
+
+export async function updatePharmacy(
+  pharmacyId: string,
+  patch: PharmacyPatch,
+): Promise<ActionResult<{ pharmacyId: string }>> {
+  try {
+    const profile = await requireRole("admin", "manager");
+    pharmacyUuidSchema.parse(pharmacyId);
+    const input = pharmacyPatchSchema.parse(patch);
+
+    const db = getDb();
+    await db.transaction(async (tx) => {
+      const normalizedBrand = input.brand.toLowerCase();
+      const [existingBrand] = await tx
+        .select({ id: pharmacyBrands.id })
+        .from(pharmacyBrands)
+        .where(eq(pharmacyBrands.normalizedName, normalizedBrand))
+        .limit(1);
+      let brandId = existingBrand?.id ?? null;
+      if (!brandId) {
+        const [insertedBrand] = await tx
+          .insert(pharmacyBrands)
+          .values({ name: input.brand, normalizedName: normalizedBrand })
+          .returning({ id: pharmacyBrands.id });
+        brandId = insertedBrand?.id ?? null;
+      }
+
+      const [updated] = await tx
+        .update(pharmacies)
+        .set({
+          name: input.name,
+          brandId,
+          address1: input.address1,
+          city: input.city,
+          state: input.state,
+          zip: input.zip,
+        })
+        .where(eq(pharmacies.id, pharmacyId))
+        .returning({ id: pharmacies.id });
+      if (!updated) throw new Error("Pharmacy not found");
+
+      await writeAudit(tx, {
+        actorId: profile.id,
+        action: "pharmacy.updated",
+        entityType: "pharmacy",
+        entityId: pharmacyId,
+        meta: { patch: input },
+      });
+    });
+
+    revalidatePath("/", "layout");
+    return ok({ pharmacyId });
+  } catch (e) {
+    return err(errorMessage(e));
+  }
+}
+
+/**
+ * Remove one location from the master list. Carrier/plan network rows
+ * cascade away; client links become unlinked raw text again (the client
+ * record itself is untouched).
+ */
+export async function deletePharmacy(
+  pharmacyId: string,
+): Promise<ActionResult<{ pharmacyId: string }>> {
+  try {
+    const profile = await requireRole("admin", "manager");
+    pharmacyUuidSchema.parse(pharmacyId);
+
+    const db = getDb();
+    const [row] = await db
+      .select({ id: pharmacies.id, name: pharmacies.name, zip: pharmacies.zip })
+      .from(pharmacies)
+      .where(eq(pharmacies.id, pharmacyId))
+      .limit(1);
+    if (!row) return err("Pharmacy not found");
+
+    await db.transaction(async (tx) => {
+      await tx
+        .update(clientPharmacies)
+        .set({ pharmacyId: null, confirmed: false })
+        .where(eq(clientPharmacies.pharmacyId, pharmacyId));
+      await tx.delete(pharmacies).where(eq(pharmacies.id, pharmacyId));
+      await writeAudit(tx, {
+        actorId: profile.id,
+        action: "pharmacy.deleted",
+        entityType: "pharmacy",
+        entityId: pharmacyId,
+        meta: { name: row.name, zip: row.zip },
+      });
+    });
+
+    revalidatePath("/", "layout");
+    return ok({ pharmacyId });
   } catch (e) {
     return err(errorMessage(e));
   }
