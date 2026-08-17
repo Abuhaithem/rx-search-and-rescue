@@ -363,3 +363,43 @@ export async function deletePharmacy(
     return err(errorMessage(e));
   }
 }
+
+/**
+ * Wipe the ENTIRE master pharmacy list — the fresh-start reset before a
+ * clean roster import. Cascades: carrier and plan network rows, analysis
+ * pharmacy selections. Client pharmacy links revert to unlinked raw text
+ * (client records stay). Brands are cleared with their locations.
+ */
+export async function deleteAllPharmacies(): Promise<
+  ActionResult<{ pharmacies: number; brands: number }>
+> {
+  try {
+    const profile = await requireRole("admin", "manager");
+    const db = getDb();
+
+    const result = await db.transaction(async (tx) => {
+      await tx
+        .update(clientPharmacies)
+        .set({ pharmacyId: null, confirmed: false })
+        .where(sql`${clientPharmacies.pharmacyId} is not null`);
+      const deletedPharmacies = await tx
+        .delete(pharmacies)
+        .returning({ id: pharmacies.id });
+      const deletedBrands = await tx
+        .delete(pharmacyBrands)
+        .returning({ id: pharmacyBrands.id });
+      await writeAudit(tx, {
+        actorId: profile.id,
+        action: "pharmacy.all_deleted",
+        entityType: "pharmacy_list",
+        meta: { pharmacies: deletedPharmacies.length, brands: deletedBrands.length },
+      });
+      return { pharmacies: deletedPharmacies.length, brands: deletedBrands.length };
+    });
+
+    revalidatePath("/", "layout");
+    return ok(result);
+  } catch (e) {
+    return err(errorMessage(e));
+  }
+}

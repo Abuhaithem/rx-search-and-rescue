@@ -4,10 +4,12 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 import { Loader2, Pencil, Search, Trash2 } from "lucide-react";
 import {
+  deleteAllPharmacies,
   deletePharmacy,
   updatePharmacy,
   type PharmacyPatch,
 } from "@/server/actions/pharmacies";
+import { TypeToConfirmDeleteDialog } from "@/components/domain/type-to-confirm-delete-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -72,17 +74,20 @@ export function PharmacyTable({
         <h2 className="font-display text-base font-extrabold text-deepwater">
           Master list (<span className="text-data">{rows.length.toLocaleString()}</span>)
         </h2>
-        <div className="relative ml-auto">
-          <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-steel" />
-          <Input
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setVisibleCount(VISIBLE_STEP);
-            }}
-            placeholder="Filter by name, brand, city, state, or ZIP…"
-            className="w-72 pl-8"
-          />
+        <div className="ml-auto flex items-center gap-2">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-steel" />
+            <Input
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setVisibleCount(VISIBLE_STEP);
+              }}
+              placeholder="Filter by name, brand, city, state, or ZIP…"
+              className="w-72 pl-8"
+            />
+          </div>
+          {rows.length > 0 ? <DeleteAllButton total={rows.length} /> : null}
         </div>
       </div>
 
@@ -220,6 +225,57 @@ export function PharmacyTable({
         />
       ) : null}
     </section>
+  );
+}
+
+function DeleteAllButton({ total }: { total: number }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [pending, startTransition] = useTransition();
+
+  const wipe = () => {
+    startTransition(async () => {
+      const result = await deleteAllPharmacies();
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success(
+        `${result.data.pharmacies.toLocaleString()} pharmacies and ${result.data.brands.toLocaleString()} brands removed`,
+      );
+      setOpen(false);
+      router.refresh();
+    });
+  };
+
+  return (
+    <>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="text-notcovered hover:bg-notcovered-soft hover:text-notcovered"
+        onClick={() => setOpen(true)}
+      >
+        <Trash2 className="size-3.5" />
+        Delete all
+      </Button>
+      <TypeToConfirmDeleteDialog
+        open={open}
+        onOpenChange={setOpen}
+        title="Delete the entire pharmacy list?"
+        confirmName="delete all pharmacies"
+        pending={pending}
+        onConfirm={wipe}
+      >
+        <p>
+          All <span className="text-data font-semibold">{total.toLocaleString()}</span>{" "}
+          pharmacies and their brands leave the system — every carrier and plan network row goes
+          with them, and client pharmacy links revert to unlinked text for re-matching. This is
+          the fresh-start reset before a clean roster import. It cannot be undone.
+        </p>
+      </TypeToConfirmDeleteDialog>
+    </>
   );
 }
 
