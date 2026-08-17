@@ -56,7 +56,9 @@ export function TypeToConfirmDeleteDialog({
           <div className="text-sm text-steel">{children}</div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="confirm-delete-name">
-              Type <span className="font-semibold text-deepwater">{confirmName}</span> to confirm
+              Type{" "}
+              <span className="font-semibold text-deepwater">&ldquo;{confirmName}&rdquo;</span>{" "}
+              to confirm
             </Label>
             <Input
               id="confirm-delete-name"
