@@ -108,6 +108,7 @@ const toEngineMedication = (med: MedicationRow): EngineMedication => ({
   rxcuis: med.rxcui ? [med.rxcui] : [],
   // Pipeline will fill brand/generic equivalents (med_related_rxcuis) later.
   relatedRxcuis: [],
+  resolvedGenericName: med.resolvedGenericName,
   genericOk: med.genericOk,
   prn: med.prn,
   quantity: med.quantity,

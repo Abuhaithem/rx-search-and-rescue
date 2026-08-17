@@ -5,6 +5,7 @@
  */
 import type { FormularyPage, RxcExtraction } from "@rxsr/core/intake";
 import type {
+  DrugResolutionExtraction,
   FormularyLegendExtraction,
   FormularyPlanNamesExtraction,
   PharmacyDirectoryExtraction,
@@ -68,6 +69,11 @@ export interface ExtractionProvider {
     promptText: string,
     options?: ExtractionCallOptions,
   ): Promise<PharmacyResolution>;
+  /** Batched brand→generic drug-name resolution (LLM ladder rung). */
+  resolveDrugNames(
+    promptText: string,
+    options?: ExtractionCallOptions,
+  ): Promise<DrugResolutionExtraction>;
 }
 
 export type {

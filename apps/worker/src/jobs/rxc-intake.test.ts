@@ -126,9 +126,12 @@ function fakeProvider(): { provider: ExtractionProvider; calls: string[] } {
     async extractPharmacyDirectoryRows() {
       throw new Error("not used");
     },
-    // Fallback returns "no pick" so tests exercise the deterministic path.
+    // Fallbacks return "no pick" so tests exercise the deterministic path.
     async resolvePharmacyCandidate() {
       return { matchedIndex: null, confidence: 0 };
+    },
+    async resolveDrugNames() {
+      return { items: [] };
     },
   } satisfies ExtractionProvider;
   return { provider, calls };

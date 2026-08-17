@@ -468,6 +468,29 @@ export const clientPharmacies = pgTable(
   (t) => [index("client_pharmacies_client_idx").on(t.clientId)],
 );
 
+/**
+ * Learned brand→generic dictionary. Every successful LLM resolution is
+ * written back here so the same brand name never needs a second LLM call;
+ * agents and seeds can add rows too. Keys are normalized molecule keys
+ * (see @rxsr/core drugs/resolution).
+ */
+export const drugAliases = pgTable(
+  "drug_aliases",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** Normalized incoming name, e.g. "zetia". */
+    alias: text("alias").notNull().unique(),
+    /** Normalized generic key, e.g. "ezetimibe"; combos hyphen-joined. */
+    genericName: text("generic_name").notNull(),
+    isCombination: boolean("is_combination").notNull().default(false),
+    /** Combination components, e.g. ["ezetimibe","simvastatin"]. */
+    components: text("components").array().notNull().default([]),
+    source: text("source").notNull().default("llm"), // llm | agent | seed
+    confidence: numeric("confidence", { precision: 4, scale: 3 }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+);
+
 export const clientMedications = pgTable(
   "client_medications",
   {
@@ -485,6 +508,10 @@ export const clientMedications = pgTable(
     daysSupply: integer("days_supply"),
     genericOk: boolean("generic_ok").notNull().default(true),
     prn: boolean("prn").notNull().default(false),
+    /** Normalized generic key the name resolved to; null = unresolved. */
+    resolvedGenericName: text("resolved_generic_name"),
+    /** Which resolution rung landed it: exact|alias|fuzzy|llm|unresolved. */
+    resolutionMethod: text("resolution_method"),
     source: medicationSource("source").notNull(),
     confidence: numeric("confidence", { precision: 4, scale: 3 }),
     confirmed: boolean("confirmed").notNull().default(false),

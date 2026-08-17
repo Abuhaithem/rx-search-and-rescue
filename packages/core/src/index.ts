@@ -7,3 +7,4 @@ export * from "./intake/contracts";
 export * from "./pharmacy/contracts";
 export * from "./pharmacy/brand";
 export * from "./report-model";
+export * from "./drugs/resolution";

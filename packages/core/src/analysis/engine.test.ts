@@ -693,3 +693,60 @@ describe("LIS cost sharing (D-SNP plans)", () => {
     expect(matrix[0]!.isPartial).toBe(false);
   });
 });
+
+// ── Resolved-generic crosswalk (brand→generic dictionary at ingestion) ──────
+
+describe("resolved-generic crosswalk", () => {
+  const entries = [
+    entry({ id: "e-eze", normalizedName: "ezetimibe oral tablet 10 mg", tier: 2, isBrand: false }),
+    entry({
+      id: "e-combo",
+      normalizedName: "ezetimibe-simvastatin oral tablet 10-20 mg",
+      tier: 3,
+      isBrand: false,
+    }),
+    entry({ id: "e-brand", rawDrugName: "ZETIA", normalizedName: "zetia 10 mg", tier: 3, isBrand: true }),
+  ];
+
+  it("matches a brand-name med to the generic entry via its resolved name", () => {
+    const match = matchMedication(
+      med({ id: "m-zetia", name: "Zetia", normalizedName: "zetia tab 10mg", resolvedGenericName: "ezetimibe" }),
+      [entries[0]!, entries[1]!],
+    );
+    expect(match?.entry.id).toBe("e-eze"); // tightest containment beats the combo
+    expect(match?.method).toBe("brand_generic_crosswalk");
+    expect(match?.substitutionNote).toContain("generic equivalent");
+  });
+
+  it("prefers the direct name match when the brand row exists", () => {
+    const match = matchMedication(
+      med({ name: "Zetia", normalizedName: "zetia 10 mg", resolvedGenericName: "ezetimibe" }),
+      entries,
+    );
+    // Step 2 (name containment) hits the ZETIA row before the crosswalk runs.
+    expect(match?.entry.id).toBe("e-brand");
+    expect(match?.method).toBe("ingredient_strength_form");
+  });
+
+  it("never lands a brand-required client on a generic entry", () => {
+    const match = matchMedication(
+      med({
+        name: "Zetia",
+        normalizedName: "zetia tab 10mg",
+        resolvedGenericName: "ezetimibe",
+        genericOk: false,
+      }),
+      [entries[0]!, entries[1]!],
+    );
+    expect(match?.method === "brand_generic_crosswalk" ? match.entry.isBrand : true).toBe(true);
+  });
+
+  it("matches combination resolutions against combo entries", () => {
+    const match = matchMedication(
+      med({ name: "Vytorin", normalizedName: "vytorin 10-20mg", resolvedGenericName: "ezetimibe simvastatin" }),
+      entries,
+    );
+    expect(match?.entry.id).toBe("e-combo");
+    expect(match?.method).toBe("brand_generic_crosswalk");
+  });
+});

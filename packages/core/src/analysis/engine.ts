@@ -32,6 +32,11 @@ export interface EngineMedication {
   rxcuis: string[];
   /** RXCUIs of brand/generic equivalents (name-based matching is primary). */
   relatedRxcuis: string[];
+  /**
+   * Generic key from the ingestion-time resolution ladder ("Zetia" →
+   * "ezetimibe"); powers the name-based brand/generic crosswalk.
+   */
+  resolvedGenericName?: string | null;
   genericOk: boolean;
   prn: boolean;
   quantity: number | null;
@@ -279,6 +284,47 @@ export function matchMedication(
           method: "brand_generic_crosswalk",
           needsConfirmation: false,
           substitutionNote: note,
+        };
+      }
+    }
+  }
+
+  // 3b. Resolved-generic crosswalk: the ingestion-time resolution ladder
+  // mapped the written name to a generic key ("Zetia" → "ezetimibe"); match
+  // it against entry names the same way step 2 matches the medication name.
+  // A client who requires brand never lands on a generic entry here.
+  if (med.resolvedGenericName) {
+    const genericTokens = tokens(med.resolvedGenericName);
+    if (genericTokens.size > 0) {
+      let best: { entry: EngineFormularyEntry; extra: number } | null = null;
+      for (const entry of entries) {
+        if (!entry.isBrand && !med.genericOk) continue; // client requires brand
+        const entryTokens = tokens(entry.normalizedName ?? entry.rawDrugName);
+        let contained = true;
+        for (const t of genericTokens) {
+          if (!entryTokens.has(t)) {
+            contained = false;
+            break;
+          }
+        }
+        if (!contained) continue;
+        const extra = entryTokens.size - genericTokens.size;
+        if (
+          best === null ||
+          extra < best.extra ||
+          (extra === best.extra && entry.tier < best.entry.tier)
+        ) {
+          best = { entry, extra };
+        }
+      }
+      if (best) {
+        return {
+          entry: best.entry,
+          method: "brand_generic_crosswalk",
+          needsConfirmation: false,
+          substitutionNote: best.entry.isBrand
+            ? `Covered as brand (${best.entry.rawDrugName})`
+            : `Covered as generic equivalent (${best.entry.rawDrugName})`,
         };
       }
     }

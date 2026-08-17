@@ -20,6 +20,7 @@ import {
   quantityLimitPageUserText,
   formularyPlanNamesSpec,
   pharmacyDirectorySpec,
+  drugResolutionSpec,
   pharmacyResolutionSpec,
   rxcExtractionSpec,
   sobExtractionSpec,
@@ -156,6 +157,14 @@ export function createGeminiProvider(deps: GeminiProviderDeps = {}): ExtractionP
     async resolvePharmacyCandidate(promptText, options) {
       return run(
         pharmacyResolutionSpec,
+        [{ text: promptText }],
+        options?.model ?? model,
+      );
+    },
+
+    async resolveDrugNames(promptText, options) {
+      return run(
+        drugResolutionSpec,
         [{ text: promptText }],
         options?.model ?? model,
       );

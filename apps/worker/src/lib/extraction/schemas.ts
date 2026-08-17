@@ -67,6 +67,26 @@ export const quantityLimitPageSchema = z.object({
 });
 export type QuantityLimitPageExtraction = z.infer<typeof quantityLimitPageSchema>;
 
+export const drugResolutionSchema = z.object({
+  items: z.array(
+    z.object({
+      /** Echo of the raw input string, verbatim — the join key. */
+      input: z.string().min(1),
+      /** Generic (INN) name, lowercase; null when not resolved. */
+      genericName: z.string().nullable(),
+      brandNames: z.array(z.string()),
+      isCombination: z.boolean(),
+      /** Generic components for combination products, else empty. */
+      components: z.array(z.string()),
+      confidence: z.number().min(0).max(1),
+      /** One short sentence. */
+      reasoning: z.string(),
+      resolved: z.boolean(),
+    }),
+  ),
+});
+export type DrugResolutionExtraction = z.infer<typeof drugResolutionSchema>;
+
 export const pharmacyResolutionSchema = z.object({
   /** Index into the provided candidate list; null = none is the pharmacy. */
   matchedIndex: z.number().int().min(0).nullable(),
@@ -324,6 +344,52 @@ const DIRECTORY_JSON_SCHEMA: JsonObjectSchema = {
   },
 };
 
+const DRUG_RESOLUTION_JSON_SCHEMA: JsonObjectSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["items"],
+  properties: {
+    items: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "input",
+          "genericName",
+          "brandNames",
+          "isCombination",
+          "components",
+          "confidence",
+          "reasoning",
+          "resolved",
+        ],
+        properties: {
+          input: {
+            type: "string",
+            minLength: 1,
+            description: "The raw input string, echoed verbatim.",
+          },
+          genericName: {
+            type: ["string", "null"],
+            description: "Generic (INN) name, lowercase; null when not resolved.",
+          },
+          brandNames: { type: "array", items: { type: "string" } },
+          isCombination: { type: "boolean" },
+          components: {
+            type: "array",
+            items: { type: "string" },
+            description: "Generic components for combination products, else empty.",
+          },
+          confidence: { type: "number", minimum: 0, maximum: 1 },
+          reasoning: { type: "string", description: "One short sentence." },
+          resolved: { type: "boolean" },
+        },
+      },
+    },
+  },
+};
+
 const PHARMACY_RESOLUTION_JSON_SCHEMA: JsonObjectSchema = {
   type: "object",
   additionalProperties: false,
@@ -509,6 +575,25 @@ Classify network status — carriers use DIFFERENT vocabulary for the same two t
 Always copy the document's verbatim cost-share wording into statusLabel (null when there is none). Never invent rows.`,
   jsonSchema: DIRECTORY_JSON_SCHEMA,
   parse: (input) => pharmacyDirectoryExtractionSchema.parse(input),
+};
+
+/**
+ * Batched brand→generic drug-name resolution — the LAST rung of the
+ * resolution ladder (exact → alias → fuzzy run deterministically first).
+ * The model identifies molecules only; it never touches coverage.
+ */
+export const drugResolutionSpec: ExtractionSpec<DrugResolutionExtraction> = {
+  toolName: "record_drug_resolutions",
+  description: "Record generic-name resolutions for a batch of drug names.",
+  systemPrompt: `You map drug names from Medicare coverage documents and client forms to their generic (INN) names. Inputs may be brand names ("Zetia"), generics, misspellings, or abbreviations, possibly with dosage text.
+Rules:
+- For each input, echo it verbatim in "input" and return the lowercase generic name of the molecule ("Zetia" → "ezetimibe").
+- Ignore salt forms, strengths, dosage forms, and routes when identifying the molecule.
+- Combination products: set isCombination true and list every generic component ("Vytorin" → ["ezetimibe","simvastatin"]); set genericName to the components joined with a hyphen ("ezetimibe-simvastatin").
+- When uncertain, set resolved false and genericName null. A missed match is acceptable; a wrong match is not. Never invent drugs that don't exist.
+- You resolve NAMES only. Never infer, alter, or comment on coverage status.`,
+  jsonSchema: DRUG_RESOLUTION_JSON_SCHEMA,
+  parse: (input) => drugResolutionSchema.parse(input),
 };
 
 /**

@@ -21,6 +21,7 @@ import type { RxcIntakeJob } from "../queues";
 import { markJobDone, markJobFailed, markJobRunning, updateJobProgress } from "../lib/db";
 import { parseDosageText } from "../lib/dosage";
 import { parseRxcText } from "../lib/rxc-parse";
+import { resolveDrugNames } from "../lib/drug-resolution";
 import {
   candidateFromPharmacyRow,
   loadZipCandidates,
@@ -104,12 +105,12 @@ export async function runRxcIntake(
       })
       .where(eq(clients.id, job.clientId));
 
-    await insertMedications(deps, job, extraction);
+    const drugResolutionSummary = await insertMedications(deps, job, extraction);
     await insertPharmacies(deps, job, extraction);
     await insertPolicies(deps, job, extraction);
 
     await markJobDone(db, job.ingestionJobId, {
-      message: `Extracted ${extraction.medications.length} medications, ${extraction.preferredPharmacies.length} pharmacies, ${extraction.inForcePolicies.length} policies (parse_method=${parseMethod})`,
+      message: `Extracted ${extraction.medications.length} medications (drug names: ${drugResolutionSummary || "none"}), ${extraction.preferredPharmacies.length} pharmacies, ${extraction.inForcePolicies.length} policies (parse_method=${parseMethod})`,
     });
   } catch (error) {
     await markJobFailed(db, job.ingestionJobId, error);
@@ -121,8 +122,21 @@ async function insertMedications(
   deps: JobDeps,
   job: RxcIntakeJob,
   extraction: RxcExtraction,
-): Promise<void> {
+): Promise<string> {
   const { db } = deps;
+  await updateJobProgress(db, job.ingestionJobId, {
+    message: `Resolving ${extraction.medications.length} drug names`,
+  });
+
+  // Brand → generic resolution ladder (exact/alias/fuzzy, then one batched
+  // LLM call for the leftovers). Runs here — at ingestion — never at
+  // analysis time.
+  const resolutions = await resolveDrugNames(
+    db,
+    deps.extractor,
+    extraction.medications.map((m) => m.name),
+  );
+
   await updateJobProgress(db, job.ingestionJobId, {
     message: `Saving ${extraction.medications.length} medications`,
   });
@@ -130,6 +144,7 @@ async function insertMedications(
   const rows: (typeof clientMedications.$inferInsert)[] = [];
   for (const [index, medication] of extraction.medications.entries()) {
     const dosage = parseDosageText(medication.dosageText);
+    const resolution = resolutions.get(medication.name);
     rows.push({
       clientId: job.clientId,
       rawText: medication.rawText,
@@ -142,13 +157,27 @@ async function insertMedications(
       daysSupply: medication.daysSupply,
       genericOk: medication.genericOk ?? true,
       prn: medication.prn,
+      resolvedGenericName: resolution?.genericKey ?? null,
+      resolutionMethod: resolution?.path ?? null,
       source: medication.source,
       confidence: medication.confidence.toFixed(3),
       confirmed: false,
       position: index,
     });
   }
+
+  // Per-path audit trail for accuracy measurement lives on each row
+  // (resolution_method); the job message carries the totals.
+  const pathCounts = new Map<string, number>();
+  for (const row of rows) {
+    const path = row.resolutionMethod ?? "unresolved";
+    pathCounts.set(path, (pathCounts.get(path) ?? 0) + 1);
+  }
+  const resolutionSummary = [...pathCounts.entries()]
+    .map(([path, count]) => `${count} ${path}`)
+    .join(", ");
   if (rows.length > 0) await db.insert(clientMedications).values(rows);
+  return resolutionSummary;
 }
 
 async function insertPharmacies(
