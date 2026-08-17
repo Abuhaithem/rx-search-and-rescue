@@ -12,6 +12,7 @@ import {
   formularyEntries,
   getDb,
   inForcePolicies,
+  planPharmacyNetworks,
   planServiceAreas,
   planTierCosts,
   plans,
@@ -1049,6 +1050,70 @@ export async function importCmsData(
 
     revalidatePath("/", "layout");
     return ok({ ingestionJobId });
+  } catch (e) {
+    return err(errorMessage(e));
+  }
+}
+
+/**
+ * Wipe a carrier's pharmacy network for one plan year — the reset for stale
+ * imports (old-schema directory/xlsx rows). Removes the carrier-level rows
+ * AND the per-plan exception rows of that carrier's plans; the pharmacies
+ * themselves stay. Rebuild by re-importing a directory or setting statuses.
+ */
+export async function clearCarrierPharmacyNetwork(
+  carrierId: string,
+  planYear: number,
+): Promise<ActionResult<{ carrierRows: number; planRows: number }>> {
+  try {
+    const profile = await requireRole("admin", "manager");
+    const input = z
+      .object({ carrierId: uuidSchema, planYear: z.coerce.number().int().min(2020).max(2100) })
+      .parse({ carrierId, planYear });
+
+    const db = getDb();
+    const [carrier] = await db.select().from(carriers).where(eq(carriers.id, input.carrierId));
+    if (!carrier) return err("Carrier not found");
+
+    const { carrierRows, planRows } = await db.transaction(async (tx) => {
+      const deletedCarrierRows = await tx
+        .delete(carrierPharmacyNetworks)
+        .where(
+          and(
+            eq(carrierPharmacyNetworks.carrierId, input.carrierId),
+            eq(carrierPharmacyNetworks.planYear, input.planYear),
+          ),
+        )
+        .returning({ id: carrierPharmacyNetworks.id });
+
+      const carrierPlans = await tx
+        .select({ id: plans.id })
+        .from(plans)
+        .where(and(eq(plans.carrierId, input.carrierId), eq(plans.planYear, input.planYear)));
+      const deletedPlanRows =
+        carrierPlans.length > 0
+          ? await tx
+              .delete(planPharmacyNetworks)
+              .where(inArray(planPharmacyNetworks.planId, carrierPlans.map((p) => p.id)))
+              .returning({ id: planPharmacyNetworks.id })
+          : [];
+
+      await writeAudit(tx, {
+        actorId: profile.id,
+        action: "carrier.pharmacy_network_cleared",
+        entityType: "carrier",
+        entityId: input.carrierId,
+        meta: {
+          planYear: input.planYear,
+          carrierRows: deletedCarrierRows.length,
+          planRows: deletedPlanRows.length,
+        },
+      });
+      return { carrierRows: deletedCarrierRows.length, planRows: deletedPlanRows.length };
+    });
+
+    revalidatePath("/", "layout");
+    return ok({ carrierRows, planRows });
   } catch (e) {
     return err(errorMessage(e));
   }

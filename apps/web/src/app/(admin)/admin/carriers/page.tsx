@@ -298,6 +298,7 @@ export default async function CarriersPage({ searchParams }: CarriersPageProps) 
               <CarrierNetworkSection
                 key={`network-${selected.id}`}
                 carrierId={selected.id}
+                carrierName={selected.name}
                 year={year}
                 networkCount={selected.networkCount}
                 zip={zip}

@@ -25,7 +25,12 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "@/components/ui/sonner";
-import { attachCarrierDirectory, setCarrierPharmacyStatus } from "@/server/actions/admin";
+import {
+  attachCarrierDirectory,
+  clearCarrierPharmacyNetwork,
+  setCarrierPharmacyStatus,
+} from "@/server/actions/admin";
+import { TypeToConfirmDeleteDialog } from "@/components/domain/type-to-confirm-delete-dialog";
 import type { NetworkStatus } from "@rxsr/core";
 import { fileTooLarge, MAX_PDF_BYTES } from "@/lib/file-limits";
 import type { DirectoryJobStatus, PharmacyZipRow } from "../../_lib/pharmacies";
@@ -43,6 +48,7 @@ const STATUS_OPTIONS: { value: NetworkStatus; label: string }[] = [
  */
 export function CarrierNetworkSection({
   carrierId,
+  carrierName,
   year,
   networkCount,
   zip,
@@ -50,6 +56,7 @@ export function CarrierNetworkSection({
   job,
 }: {
   carrierId: string;
+  carrierName: string;
   year: number;
   networkCount: number;
   zip: string | null;
@@ -93,7 +100,15 @@ export function CarrierNetworkSection({
             {networkCount.toLocaleString()} pharmacies on file for {year} — shared by every plan
             of this carrier
           </span>
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-1.5">
+            {networkCount > 0 ? (
+              <ClearNetworkButton
+                carrierId={carrierId}
+                carrierName={carrierName}
+                planYear={year}
+                networkCount={networkCount}
+              />
+            ) : null}
             <AttachDirectoryDialog carrierId={carrierId} planYear={year} hasNetwork={networkCount > 0} />
           </div>
         </div>
@@ -181,6 +196,66 @@ export function CarrierNetworkSection({
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function ClearNetworkButton({
+  carrierId,
+  carrierName,
+  planYear,
+  networkCount,
+}: {
+  carrierId: string;
+  carrierName: string;
+  planYear: number;
+  networkCount: number;
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [pending, startTransition] = useTransition();
+
+  const clear = () => {
+    startTransition(async () => {
+      const result = await clearCarrierPharmacyNetwork(carrierId, planYear);
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success(
+        `Network cleared — ${result.data.carrierRows.toLocaleString()} carrier rows and ${result.data.planRows.toLocaleString()} plan exceptions removed`,
+      );
+      setOpen(false);
+      router.refresh();
+    });
+  };
+
+  return (
+    <>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="text-notcovered hover:bg-notcovered-soft hover:text-notcovered"
+        onClick={() => setOpen(true)}
+      >
+        Clear network
+      </Button>
+      <TypeToConfirmDeleteDialog
+        open={open}
+        onOpenChange={setOpen}
+        title={`Clear ${carrierName}'s ${planYear} pharmacy network?`}
+        confirmName={carrierName}
+        pending={pending}
+        onConfirm={clear}
+      >
+        <p>
+          All <span className="text-data font-semibold">{networkCount.toLocaleString()}</span>{" "}
+          network rows for {planYear} will be removed — imported AND agent-verified statuses,
+          plus any per-plan exceptions. The pharmacies themselves stay in the master list.
+          Rebuild by re-uploading a directory or setting statuses in the ZIP search.
+        </p>
+      </TypeToConfirmDeleteDialog>
+    </>
   );
 }
 
