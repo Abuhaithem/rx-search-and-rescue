@@ -8,7 +8,11 @@ import { PageHeader } from "@/components/domain/page-header";
 import { CarrierLogo } from "@/components/domain/carrier-logo";
 import { formatUsd } from "@/components/domain/format";
 import { cn } from "@/lib/utils";
-import { getLatestDirectoryJob, searchPharmaciesByZip } from "../_lib/pharmacies";
+import {
+  getCarrierNetworkCount,
+  getLatestDirectoryJob,
+  searchPharmaciesByZip,
+} from "../_lib/pharmacies";
 import { RefreshPoller } from "../formularies/_components/refresh-poller";
 import { CarrierDialog } from "./_components/carrier-dialog";
 import { DeleteFormularyButton } from "./_components/delete-formulary-button";
@@ -33,9 +37,13 @@ export default async function CarriersPage({ searchParams }: CarriersPageProps) 
   const selected =
     catalog.find((c) => c.id === params.carrier) ?? catalog[0] ?? null;
   const zip = /^\d{5}$/.test(params.zip ?? "") ? params.zip! : null;
-  const [pharmacyResults, directoryJob] = await Promise.all([
+  const [pharmacyResults, directoryJob, previousYearNetworkCount] = await Promise.all([
     selected && zip ? searchPharmaciesByZip(zip, selected.id, year) : Promise.resolve([]),
     selected ? getLatestDirectoryJob(selected.id) : Promise.resolve(null),
+    // Offered as a carry-over source when this year's network is empty.
+    selected && selected.networkCount === 0
+      ? getCarrierNetworkCount(selected.id, year - 1)
+      : Promise.resolve(0),
   ]);
   const directoryRunning =
     directoryJob?.status === "running" || directoryJob?.status === "queued";
@@ -301,6 +309,7 @@ export default async function CarriersPage({ searchParams }: CarriersPageProps) 
                 carrierName={selected.name}
                 year={year}
                 networkCount={selected.networkCount}
+                previousYearNetworkCount={previousYearNetworkCount}
                 zip={zip}
                 results={pharmacyResults}
                 job={directoryJob}

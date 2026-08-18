@@ -86,3 +86,22 @@ export async function getLatestDirectoryJob(
     .limit(1);
   return job ?? null;
 }
+
+/** Rows on a carrier's network for one plan year (unstaged). */
+export async function getCarrierNetworkCount(
+  carrierId: string,
+  planYear: number,
+): Promise<number> {
+  const db = getDb();
+  const [row] = await db
+    .select({ value: sql<number>`count(*)::int` })
+    .from(carrierPharmacyNetworks)
+    .where(
+      and(
+        eq(carrierPharmacyNetworks.carrierId, carrierId),
+        eq(carrierPharmacyNetworks.planYear, planYear),
+        eq(carrierPharmacyNetworks.staged, false),
+      ),
+    );
+  return row?.value ?? 0;
+}

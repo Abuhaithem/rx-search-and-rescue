@@ -28,6 +28,7 @@ import { toast } from "@/components/ui/sonner";
 import {
   attachCarrierDirectory,
   clearCarrierPharmacyNetwork,
+  copyCarrierNetworkFromPreviousYear,
   setCarrierPharmacyStatus,
 } from "@/server/actions/admin";
 import { TypeToConfirmDeleteDialog } from "@/components/domain/type-to-confirm-delete-dialog";
@@ -51,6 +52,7 @@ export function CarrierNetworkSection({
   carrierName,
   year,
   networkCount,
+  previousYearNetworkCount = 0,
   zip,
   results,
   job,
@@ -59,6 +61,8 @@ export function CarrierNetworkSection({
   carrierName: string;
   year: number;
   networkCount: number;
+  /** Rows on last year's network — offered as a carry-over seed when this year is empty. */
+  previousYearNetworkCount?: number;
   zip: string | null;
   results: PharmacyZipRow[];
   job: DirectoryJobStatus | null;
@@ -107,6 +111,13 @@ export function CarrierNetworkSection({
                 carrierName={carrierName}
                 planYear={year}
                 networkCount={networkCount}
+              />
+            ) : null}
+            {networkCount === 0 && previousYearNetworkCount > 0 ? (
+              <CopyPreviousYearButton
+                carrierId={carrierId}
+                planYear={year}
+                previousYearNetworkCount={previousYearNetworkCount}
               />
             ) : null}
             <AttachDirectoryDialog carrierId={carrierId} planYear={year} hasNetwork={networkCount > 0} />
@@ -196,6 +207,69 @@ export function CarrierNetworkSection({
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function CopyPreviousYearButton({
+  carrierId,
+  planYear,
+  previousYearNetworkCount,
+}: {
+  carrierId: string;
+  planYear: number;
+  previousYearNetworkCount: number;
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [pending, startTransition] = useTransition();
+
+  const copy = () => {
+    startTransition(async () => {
+      const result = await copyCarrierNetworkFromPreviousYear(carrierId, planYear);
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success(
+        `${result.data.copied.toLocaleString()} pharmacies carried over from ${result.data.fromYear}`,
+      );
+      setOpen(false);
+      router.refresh();
+    });
+  };
+
+  return (
+    <>
+      <Button type="button" variant="secondary" size="sm" onClick={() => setOpen(true)}>
+        Copy {planYear - 1} network
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>
+              Carry the {planYear - 1} network into {planYear}?
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-steel">
+            All{" "}
+            <span className="text-data font-semibold">
+              {previousYearNetworkCount.toLocaleString()}
+            </span>{" "}
+            pharmacy statuses from {planYear - 1} are copied as a starting point, marked
+            &ldquo;carryover&rdquo;. Uploading the {planYear} directory later overwrites them,
+            and any status you set by hand outranks them — nothing is treated as verified.
+          </p>
+          <DialogFooter>
+            <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={copy} disabled={pending}>
+              {pending ? "Copying…" : `Copy ${previousYearNetworkCount.toLocaleString()} rows`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 

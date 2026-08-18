@@ -1119,6 +1119,82 @@ export async function clearCarrierPharmacyNetwork(
   }
 }
 
+/**
+ * Seed a plan year's pharmacy network from the previous year. Rows land as
+ * source "carryover" — an assumption, not a verification: a fresh directory
+ * import for the new year overwrites them, and agent-set statuses outrank
+ * them, exactly like any automated source. Refused when the target year
+ * already has rows (clear it first) so a copy never silently merges.
+ */
+export async function copyCarrierNetworkFromPreviousYear(
+  carrierId: string,
+  planYear: number,
+): Promise<ActionResult<{ copied: number; fromYear: number }>> {
+  try {
+    const profile = await requireRole("admin", "manager");
+    const input = z
+      .object({ carrierId: uuidSchema, planYear: z.coerce.number().int().min(2021).max(2100) })
+      .parse({ carrierId, planYear });
+    const fromYear = input.planYear - 1;
+
+    const db = getDb();
+    const [carrier] = await db.select().from(carriers).where(eq(carriers.id, input.carrierId));
+    if (!carrier) return err("Carrier not found");
+
+    const [targetCount] = await db
+      .select({ value: count() })
+      .from(carrierPharmacyNetworks)
+      .where(
+        and(
+          eq(carrierPharmacyNetworks.carrierId, input.carrierId),
+          eq(carrierPharmacyNetworks.planYear, input.planYear),
+        ),
+      );
+    if ((targetCount?.value ?? 0) > 0) {
+      return err(`${input.planYear} already has network rows — clear them first to re-copy`);
+    }
+
+    const sourceRows = await db
+      .select({
+        pharmacyId: carrierPharmacyNetworks.pharmacyId,
+        status: carrierPharmacyNetworks.status,
+      })
+      .from(carrierPharmacyNetworks)
+      .where(
+        and(
+          eq(carrierPharmacyNetworks.carrierId, input.carrierId),
+          eq(carrierPharmacyNetworks.planYear, fromYear),
+          eq(carrierPharmacyNetworks.staged, false),
+        ),
+      );
+    if (sourceRows.length === 0) return err(`${fromYear} has no network to copy from`);
+
+    await db.transaction(async (tx) => {
+      await tx.insert(carrierPharmacyNetworks).values(
+        sourceRows.map((row) => ({
+          carrierId: input.carrierId,
+          planYear: input.planYear,
+          pharmacyId: row.pharmacyId,
+          status: row.status,
+          source: "carryover" as const,
+        })),
+      );
+      await writeAudit(tx, {
+        actorId: profile.id,
+        action: "carrier.pharmacy_network_carried_over",
+        entityType: "carrier",
+        entityId: input.carrierId,
+        meta: { fromYear, toYear: input.planYear, copied: sourceRows.length },
+      });
+    });
+
+    revalidatePath("/", "layout");
+    return ok({ copied: sourceRows.length, fromYear });
+  } catch (e) {
+    return err(errorMessage(e));
+  }
+}
+
 /** Agent-verified status on the carrier's network — outranks every import. */
 export async function setCarrierPharmacyStatus(
   carrierId: string,

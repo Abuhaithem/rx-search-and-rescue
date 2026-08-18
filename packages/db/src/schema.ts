@@ -50,6 +50,8 @@ export const networkSource = pgEnum("network_source", [
   "directory",
   "xlsx",
   "agent",
+  /** Copied from the previous plan year — an assumption until re-verified. */
+  "carryover",
 ]);
 
 export const costTier = pgEnum("cost_tier", [
