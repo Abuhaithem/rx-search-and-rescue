@@ -4,8 +4,10 @@
  * parsing, multi-strength expansion, cross-page dedup (exact repeats are
  * collapsed; same-name disagreements are flagged for review), and batch
  * insert.
- * Each extraction call receives a single-page sub-PDF; index/front-matter
- * pages are skipped up front by the deterministic text-layer classifier
+ * Each extraction call receives a single-page sub-PDF; several pages extract
+ * in parallel but their outcomes apply in strict page order (deterministic
+ * dedup/provenance). Index/front-matter pages are skipped up front by the
+ * deterministic text-layer classifier
  * (lib/page-classify) so no API call is spent on them. Pages that fail the
  * cross-check get one retry on the provider's escalation model before landing
  * in needs_review. Ends at status "qa" — an admin must resolve review rows
@@ -86,35 +88,43 @@ export async function runFormularyIngest(
       pending = [];
     };
 
-    for (let page = windowStart; page <= windowEnd; page++) {
-      await updateJobProgress(db, job.ingestionJobId, {
-        page,
-        totalPages: windowEnd,
-        message: `Extracting page ${page} of ${textLayer.totalPages}${
-          skippedPages > 0 ? ` (${skippedPages} skipped)` : ""
-        }${escalations > 0 ? ` (${escalations} escalations)` : ""}`,
-      });
+    // Pages extract PAGE_PARALLELISM at a time (the LLM round-trip dominates
+    // wall-clock), but outcomes are APPLIED strictly in page order below, so
+    // dedup winners and provenance stay deterministic run to run. The
+    // process-wide LLM-call cap bounds total pressure across concurrent jobs.
+    const pageParallelism = (() => {
+      const raw = Number(process.env.FORMULARY_PAGE_PARALLELISM);
+      return Number.isInteger(raw) && raw >= 1 && raw <= 8 ? raw : 3;
+    })();
 
+    type PageOutcome =
+      | { kind: "skip" }
+      | { kind: "empty"; escalated: boolean }
+      | { kind: "quantity-limit"; rows: { rawDrugName: string; quantityLimitText: string }[] }
+      | {
+          kind: "table";
+          rows: Awaited<ReturnType<typeof deps.extractor.extractFormularyPage>>["rows"];
+          checkOk: boolean;
+          escalated: boolean;
+        };
+
+    const extractPage = async (page: number): Promise<PageOutcome> => {
       const pageText = textLayer.pages[page - 1] ?? "";
       const pageClass = classifyFormularyPage(pageText);
-      if (pageClass === "skip") {
-        skippedPages += 1;
-        continue;
-      }
-      if (pageClass === "quantity-limit") {
-        const qlBase64 = await pages.pageBase64(page);
-        const qlExtracted = await deps.extractor.extractQuantityLimitPage(qlBase64, 1);
-        quantityLimitRows.push(...qlExtracted.rows);
-        continue;
-      }
+      if (pageClass === "skip") return { kind: "skip" };
 
       const pageBase64 = await pages.pageBase64(page);
+      if (pageClass === "quantity-limit") {
+        const qlExtracted = await deps.extractor.extractQuantityLimitPage(pageBase64, 1);
+        return { kind: "quantity-limit", rows: qlExtracted.rows };
+      }
+
       let extracted = await deps.extractor.extractFormularyPage(pageBase64, 1);
       let check = crossCheckFormularyPage(extracted.rows, pageText);
-
+      let escalated = false;
       // One retry on the escalation model before rows land in needs_review.
       if (!check.ok && deps.extractor.escalationModel !== null) {
-        escalations += 1;
+        escalated = true;
         const retried = await deps.extractor.extractFormularyPage(pageBase64, 1, {
           model: deps.extractor.escalationModel,
         });
@@ -124,12 +134,49 @@ export async function runFormularyIngest(
           check = retriedCheck;
         }
       }
-      if (extracted.rows.length === 0) continue;
+      if (extracted.rows.length === 0) return { kind: "empty", escalated };
+      return { kind: "table", rows: extracted.rows, checkOk: check.ok, escalated };
+    };
 
-      const confidence = check.ok ? OK_CONFIDENCE : MISMATCH_CONFIDENCE;
-      const needsReview = !check.ok;
+    const pageList: number[] = [];
+    for (let page = windowStart; page <= windowEnd; page++) pageList.push(page);
+    const inFlight: (Promise<PageOutcome> | undefined)[] = new Array(pageList.length);
+    let started = 0;
 
-      for (const row of extracted.rows) {
+    for (let i = 0; i < pageList.length; i++) {
+      while (started < Math.min(pageList.length, i + pageParallelism)) {
+        const index = started;
+        inFlight[index] = extractPage(pageList[index]!);
+        started += 1;
+      }
+
+      const page = pageList[i]!;
+      await updateJobProgress(db, job.ingestionJobId, {
+        page,
+        totalPages: windowEnd,
+        message: `Extracting page ${page} of ${textLayer.totalPages}${
+          skippedPages > 0 ? ` (${skippedPages} skipped)` : ""
+        }${escalations > 0 ? ` (${escalations} escalations)` : ""}`,
+      });
+
+      const outcome = await inFlight[i]!;
+      inFlight[i] = undefined; // free the page result as soon as it's applied
+
+      if (outcome.kind === "skip") {
+        skippedPages += 1;
+        continue;
+      }
+      if (outcome.kind === "quantity-limit") {
+        quantityLimitRows.push(...outcome.rows);
+        continue;
+      }
+      if (outcome.escalated) escalations += 1;
+      if (outcome.kind === "empty") continue;
+
+      const confidence = outcome.checkOk ? OK_CONFIDENCE : MISMATCH_CONFIDENCE;
+      const needsReview = !outcome.checkOk;
+
+      for (const row of outcome.rows) {
         const restrictions = parseRestrictions(row.requirementsText);
         for (const normalizedName of expandStrengths(row.rawDrugName)) {
           const signature = entrySignature({

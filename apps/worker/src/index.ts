@@ -12,6 +12,15 @@ const connection = new IORedis(process.env.REDIS_URL ?? "redis://localhost:6379"
   maxRetriesPerRequest: null,
 });
 
+const concurrencyFromEnv = (name: string, fallback: number): number => {
+  const raw = Number(process.env[name]);
+  return Number.isInteger(raw) && raw >= 1 && raw <= 16 ? raw : fallback;
+};
+/** Formulary extractions running at once — memory-bound (one PDF each). */
+const FORMULARY_CONCURRENCY = concurrencyFromEnv("WORKER_FORMULARY_CONCURRENCY", 4);
+/** Everything else that ingests (SOB, directories, rosters, xlsx, CMS, RxC). */
+const INGEST_CONCURRENCY = concurrencyFromEnv("WORKER_INGEST_CONCURRENCY", 2);
+
 async function main() {
   const workers: Worker[] = [
     new Worker(
@@ -20,7 +29,7 @@ async function main() {
         const { runFormularyIngest } = await import("./jobs/formulary-ingest");
         return runFormularyIngest(job.data);
       },
-      { connection, concurrency: 1 },
+      { connection, concurrency: FORMULARY_CONCURRENCY },
     ),
     new Worker(
       QUEUE_NAMES.rxcIntake,
@@ -28,7 +37,7 @@ async function main() {
         const { runRxcIntake } = await import("./jobs/rxc-intake");
         return runRxcIntake(job.data);
       },
-      { connection, concurrency: 2 },
+      { connection, concurrency: INGEST_CONCURRENCY },
     ),
     new Worker(
       QUEUE_NAMES.pharmacyDirectory,
@@ -36,7 +45,7 @@ async function main() {
         const { runPharmacyDirectory } = await import("./jobs/pharmacy-directory");
         return runPharmacyDirectory(job.data);
       },
-      { connection, concurrency: 1 },
+      { connection, concurrency: INGEST_CONCURRENCY },
     ),
     new Worker(
       QUEUE_NAMES.pharmacyRoster,
@@ -44,7 +53,7 @@ async function main() {
         const { runPharmacyRoster } = await import("./jobs/pharmacy-roster");
         return runPharmacyRoster(job.data);
       },
-      { connection, concurrency: 1 },
+      { connection, concurrency: INGEST_CONCURRENCY },
     ),
     new Worker(
       QUEUE_NAMES.reportPdf,
@@ -52,6 +61,7 @@ async function main() {
         const { runReportPdf } = await import("./jobs/report-pdf");
         return runReportPdf(job.data);
       },
+      // LibreOffice conversion takes a full core — never parallel on 2 vCPUs.
       { connection, concurrency: 1 },
     ),
     new Worker(
@@ -60,7 +70,7 @@ async function main() {
         const { runSobIngest } = await import("./jobs/sob-ingest");
         return runSobIngest(job.data);
       },
-      { connection, concurrency: 1 },
+      { connection, concurrency: INGEST_CONCURRENCY },
     ),
     new Worker(
       QUEUE_NAMES.xlsxImport,
@@ -68,7 +78,7 @@ async function main() {
         const { runXlsxImport } = await import("./jobs/xlsx-import");
         return runXlsxImport(job.data);
       },
-      { connection, concurrency: 1 },
+      { connection, concurrency: INGEST_CONCURRENCY },
     ),
     new Worker(
       QUEUE_NAMES.cmsImport,
@@ -76,7 +86,7 @@ async function main() {
         const { runCmsImport } = await import("./jobs/cms-import");
         return runCmsImport(job.data);
       },
-      { connection, concurrency: 1 },
+      { connection, concurrency: INGEST_CONCURRENCY },
     ),
   ];
 

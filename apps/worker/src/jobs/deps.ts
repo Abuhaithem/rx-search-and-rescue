@@ -7,6 +7,7 @@
  */
 import { getExtractionProvider, type ExtractionProvider } from "../lib/extraction";
 import { createWorkerDb, type Db } from "../lib/db";
+import { limitExtractionProvider } from "../lib/llm-limiter";
 import { pdfTextReader, type PdfTextReader } from "../lib/pdf";
 import { createStorage, type StorageDownloader } from "../lib/storage";
 
@@ -26,7 +27,9 @@ export function createJobDeps(): JobDeps {
     db: createWorkerDb(),
     storage: createStorage(),
     get extractor() {
-      extractor ??= getExtractionProvider();
+      // Wrapped in the process-wide call cap: concurrent jobs share one
+      // LLM-call budget instead of multiplying pressure on the provider.
+      extractor ??= limitExtractionProvider(getExtractionProvider());
       return extractor;
     },
     pdf: pdfTextReader,
