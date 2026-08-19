@@ -130,12 +130,23 @@ async function insertMedications(
 
   // Brand → generic resolution ladder (exact/alias/fuzzy, then one batched
   // LLM call for the leftovers). Runs here — at ingestion — never at
-  // analysis time.
+  // analysis time. The dosage column often carries the generic where the
+  // medication column carries the brand ("Zetia" / "ezetimibe TAB 10MG"),
+  // so both strings enter the ladder and the name's answer wins on a tie.
   const resolutions = await resolveDrugNames(
     db,
     deps.extractor,
-    extraction.medications.map((m) => m.name),
+    extraction.medications.flatMap((m) => [m.name, ...(m.dosageText ? [m.dosageText] : [])]),
   );
+  const resolutionFor = (medication: { name: string; dosageText: string | null }) => {
+    const byName = resolutions.get(medication.name);
+    if (byName && byName.path !== "unresolved") return byName;
+    const byDosage = medication.dosageText
+      ? resolutions.get(medication.dosageText)
+      : undefined;
+    if (byDosage && byDosage.path !== "unresolved") return byDosage;
+    return byName ?? byDosage;
+  };
 
   await updateJobProgress(db, job.ingestionJobId, {
     message: `Saving ${extraction.medications.length} medications`,
@@ -144,7 +155,7 @@ async function insertMedications(
   const rows: (typeof clientMedications.$inferInsert)[] = [];
   for (const [index, medication] of extraction.medications.entries()) {
     const dosage = parseDosageText(medication.dosageText);
-    const resolution = resolutions.get(medication.name);
+    const resolution = resolutionFor(medication);
     rows.push({
       clientId: job.clientId,
       rawText: medication.rawText,

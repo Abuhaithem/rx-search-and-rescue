@@ -153,18 +153,22 @@ export function PharmacyCards({
                     </div>
                     <div className="text-xs text-steel">
                       {pharmacy.locationCount > 1 ? (
+                        // A brand is one choice — no per-location ZIP listing.
                         <>
-                          <span className="text-data">{pharmacy.locationCount}</span> locations ·
-                          priced at{" "}
+                          <span className="text-data">{pharmacy.locationCount}</span> locations
+                          {pharmacy.state ? ` · ${pharmacy.state}` : ""}
                         </>
-                      ) : null}
-                      {[pharmacy.city, pharmacy.state].filter(Boolean).join(", ")}
-                      {pharmacy.zip ? (
+                      ) : (
                         <>
-                          {" "}
-                          · <span className="text-data">{pharmacy.zip}</span>
+                          {[pharmacy.city, pharmacy.state].filter(Boolean).join(", ")}
+                          {pharmacy.zip ? (
+                            <>
+                              {" "}
+                              · <span className="text-data">{pharmacy.zip}</span>
+                            </>
+                          ) : null}
                         </>
-                      ) : null}
+                      )}
                     </div>
                   </div>
                 </div>

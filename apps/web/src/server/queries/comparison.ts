@@ -33,6 +33,7 @@ import {
 } from "@rxsr/core/analysis";
 import {
   CHANNEL_LABELS,
+  normalizePharmacyBrandName,
   type AnalysisStatus,
   type Cents,
   type NetworkStatus,
@@ -644,7 +645,10 @@ export async function getComparablePharmacies(
   const selectedIdSet = new Set(analysis.pharmacies.map((p) => p.pharmacyId));
   const groups = new Map<string, typeof rows>();
   for (const row of rows) {
-    const key = row.brandId ?? `solo:${row.id}`;
+    // brandId groups chains; rows without one (older imports) still group by
+    // their derived brand name, so a chain never renders once per location.
+    const derivedBrand = normalizePharmacyBrandName(row.name);
+    const key = row.brandId ?? (derivedBrand !== "" ? `name:${derivedBrand}` : `solo:${row.id}`);
     const group = groups.get(key);
     if (group) group.push(row);
     else groups.set(key, [row]);

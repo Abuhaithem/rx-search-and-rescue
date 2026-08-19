@@ -15,6 +15,7 @@ import { uploadObject } from "../storage";
 import { err, errorMessage, ok, type ActionResult } from "../action-result";
 import { requireRole } from "../auth";
 import { writeAudit } from "../audit";
+import { resolveDrugNamesDeterministic } from "../drug-resolution";
 import { enqueueIngestionJob, QUEUE_NAMES } from "../enqueue";
 import {
   confirmIntakeSchema,
@@ -125,6 +126,43 @@ export async function confirmIntake(
     const existing = await db.query.clients.findFirst({ where: eq(clients.id, clientId) });
     if (!existing) return err("Client not found");
 
+    // Deterministic brand→generic resolution (exact/alias/fuzzy — no LLM in
+    // the web app) so edited, manual, and pre-feature medications resolve on
+    // confirm. Name first, dosage text as fallback ("Zetia" / "ezetimibe TAB
+    // 10MG"). An existing resolution survives when nothing found and the
+    // name is unchanged — a confirm never downgrades an LLM answer.
+    const priorMedications = await db.query.clientMedications.findMany({
+      where: eq(clientMedications.clientId, clientId),
+      columns: { id: true, name: true, resolvedGenericName: true, resolutionMethod: true },
+    });
+    const priorById = new Map(priorMedications.map((m) => [m.id, m]));
+    const resolutions = await resolveDrugNamesDeterministic(
+      input.medications.flatMap((m) => [m.name, ...(m.dosageText ? [m.dosageText] : [])]),
+    );
+    const resolutionValues = (med: {
+      id?: string | null;
+      name: string;
+      dosageText?: string | null;
+    }): { resolvedGenericName: string | null; resolutionMethod: string | null } => {
+      const byName = resolutions.get(med.name);
+      const byDosage = med.dosageText ? resolutions.get(med.dosageText) : undefined;
+      const hit =
+        byName && byName.genericKey !== null
+          ? byName
+          : byDosage && byDosage.genericKey !== null
+            ? byDosage
+            : null;
+      if (hit) return { resolvedGenericName: hit.genericKey, resolutionMethod: hit.path };
+      const prior = med.id ? priorById.get(med.id) : undefined;
+      if (prior && prior.name === med.name && prior.resolvedGenericName !== null) {
+        return {
+          resolvedGenericName: prior.resolvedGenericName,
+          resolutionMethod: prior.resolutionMethod,
+        };
+      }
+      return { resolvedGenericName: null, resolutionMethod: "unresolved" };
+    };
+
     const analysisId = await db.transaction(async (tx) => {
       await tx
         .update(clients)
@@ -146,6 +184,7 @@ export async function confirmIntake(
           prn: med.prn,
           position: med.position,
           confirmed: true,
+          ...resolutionValues(med),
         };
         if (med.id) {
           await tx.update(clientMedications).set(values).where(eq(clientMedications.id, med.id));
