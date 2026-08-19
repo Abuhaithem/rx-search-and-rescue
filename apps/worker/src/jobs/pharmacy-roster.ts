@@ -50,7 +50,14 @@ export async function runPharmacyRoster(
 
       for (const row of rows) {
         const zip = row.zip?.match(/\d{5}/)?.[0] ?? null;
-        const printedName = row.name.replace(/[†*]/g, "").trim();
+        // Belt-and-suspenders: the model is told to drop the roster's row
+        // number, and a leaked leading index ("173 Walmart Pharmacy #2862")
+        // is stripped here too — otherwise every brand becomes unique.
+        const printedName = row.name
+          .replace(/[†*]/g, "")
+          .trim()
+          .replace(/^\d{1,4}\s+(?=[A-Za-z])/, "")
+          .trim();
         if (!zip || printedName.length < 2) {
           skipped += 1;
           continue;

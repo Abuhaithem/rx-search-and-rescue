@@ -656,8 +656,9 @@ Always copy the document's verbatim cost-share wording into statusLabel (null wh
 export const pharmacyRosterSpec: ExtractionSpec<PharmacyRosterExtraction> = {
   toolName: "record_pharmacy_roster_rows",
   description: "Record active pharmacy locations from a statewide roster document.",
-  systemPrompt: `You extract pharmacy locations from a statewide pharmacy roster/directory. For each ACTIVE pharmacy row in the provided text, record: name verbatim including any store number ("Walgreens Pharmacy #10603"), street address (null if not stated or marked unverified with a dagger †), city, and 5-digit ZIP.
+  systemPrompt: `You extract pharmacy locations from a statewide pharmacy roster/directory. For each ACTIVE pharmacy row in the provided text, record: name including any store number ("Walgreens Pharmacy #10603"), street address (null if not stated or marked unverified with a dagger †), city, and 5-digit ZIP.
 Rules:
+- Roster tables often start each row with a ROW NUMBER column (1, 2, 3…). That number is NOT part of the pharmacy name — never include it.
 - Extract ONLY from tables of active pharmacies. Skip sections listing closed, defunct, or excluded locations (e.g. "Chain closed", "Store closed"), prose, statistics, and instructions.
 - A row without a 5-digit ZIP is not a usable location — omit it.
 - Strip footnote markers (†, *) from values.
