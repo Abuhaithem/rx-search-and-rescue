@@ -1,13 +1,16 @@
 /**
  * Statewide pharmacy roster ingest → the MASTER pharmacy list. Text-layer
- * chunks go through LLM row extraction (roster tables are text-heavy);
- * rows upsert into the pharmacies table on name+ZIP identity with a brand
- * assigned, so re-ingesting an updated roster refreshes addresses instead of
- * duplicating. Carrier network files map onto these rows afterwards.
+ * chunks go through LLM row extraction (roster tables are text-heavy); rows
+ * land under their CLEAN brand name (store numbers move to altNames) and
+ * upsert on name+ZIP+address identity — a brand's locations differ by
+ * address, and two stores of one brand can share a ZIP. Re-ingesting an
+ * updated roster refreshes in place. Carrier network files map onto these
+ * rows afterwards.
  */
 import { and, eq, pharmacies, sql } from "@rxsr/db";
 import type { PharmacyRosterJob } from "../queues";
 import { markJobDone, markJobFailed, markJobRunning, updateJobProgress } from "../lib/db";
+import { derivePharmacyBrandName } from "@rxsr/core/pharmacy";
 import { ensureBrandId } from "../lib/pharmacies";
 import { createJobDeps, type JobDeps } from "./deps";
 
@@ -47,25 +50,43 @@ export async function runPharmacyRoster(
 
       for (const row of rows) {
         const zip = row.zip?.match(/\d{5}/)?.[0] ?? null;
-        const name = row.name.replace(/[†*]/g, "").trim();
-        if (!zip || name.length < 2) {
+        const printedName = row.name.replace(/[†*]/g, "").trim();
+        if (!zip || printedName.length < 2) {
           skipped += 1;
           continue;
         }
 
+        // The stored name is the clean brand form ("Walgreens Pharmacy"),
+        // never the store number; the name as printed goes to altNames so
+        // client-text matching still sees "#11452"-style spellings. Since a
+        // brand can have two stores in one ZIP, identity is name+ZIP+address.
+        const name = derivePharmacyBrandName(printedName);
+        const altNames = printedName !== name ? [printedName] : [];
+        const address = row.address?.trim() || null;
+
         const [existing] = await db
-          .select({ id: pharmacies.id })
+          .select({ id: pharmacies.id, altNames: pharmacies.altNames })
           .from(pharmacies)
-          .where(and(sql`lower(${pharmacies.name}) = ${name.toLowerCase()}`, eq(pharmacies.zip, zip)))
+          .where(
+            and(
+              sql`lower(${pharmacies.name}) = ${name.toLowerCase()}`,
+              eq(pharmacies.zip, zip),
+              address === null
+                ? sql`${pharmacies.address1} is null`
+                : sql`lower(coalesce(${pharmacies.address1}, '')) = ${address.toLowerCase()}`,
+            ),
+          )
           .limit(1);
 
         if (existing) {
+          const mergedAltNames = [...new Set([...existing.altNames, ...altNames])];
           await db
             .update(pharmacies)
             .set({
-              address1: row.address,
+              address1: address,
               city: row.city,
               state,
+              altNames: mergedAltNames,
               brandId: await ensureBrandId(db, name),
             })
             .where(eq(pharmacies.id, existing.id));
@@ -73,8 +94,9 @@ export async function runPharmacyRoster(
         } else {
           await db.insert(pharmacies).values({
             name,
+            altNames,
             brandId: await ensureBrandId(db, name),
-            address1: row.address,
+            address1: address,
             city: row.city,
             state,
             zip,
