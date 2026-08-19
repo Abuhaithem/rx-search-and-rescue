@@ -1195,6 +1195,112 @@ export async function copyCarrierNetworkFromPreviousYear(
   }
 }
 
+const networkBulkSchema = z.object({
+  carrierId: uuidSchema,
+  planYear: z.coerce.number().int().min(2020).max(2100),
+  pharmacyIds: z.array(uuidSchema).min(1).max(2000),
+});
+
+/** Bulk agent verification: one status across many pharmacies, one audit row. */
+export async function setCarrierPharmacyStatusBulk(
+  carrierId: string,
+  planYear: number,
+  pharmacyIds: string[],
+  status: NetworkStatus,
+): Promise<ActionResult<{ count: number }>> {
+  try {
+    const profile = await requireRole("admin", "manager");
+    const input = networkBulkSchema
+      .extend({ status: networkStatusSchema })
+      .parse({ carrierId, planYear, pharmacyIds, status });
+
+    const db = getDb();
+    await db.transaction(async (tx) => {
+      await tx
+        .insert(carrierPharmacyNetworks)
+        .values(
+          input.pharmacyIds.map((pharmacyId) => ({
+            carrierId: input.carrierId,
+            planYear: input.planYear,
+            pharmacyId,
+            status: input.status,
+            source: "agent" as const,
+            verifiedBy: profile.id,
+            verifiedAt: new Date(),
+          })),
+        )
+        .onConflictDoUpdate({
+          target: [
+            carrierPharmacyNetworks.carrierId,
+            carrierPharmacyNetworks.planYear,
+            carrierPharmacyNetworks.pharmacyId,
+          ],
+          set: {
+            status: input.status,
+            source: "agent",
+            verifiedBy: profile.id,
+            verifiedAt: new Date(),
+          },
+        });
+      await writeAudit(tx, {
+        actorId: profile.id,
+        action: "carrier.pharmacy_status_bulk_set",
+        entityType: "carrier",
+        entityId: input.carrierId,
+        meta: { planYear: input.planYear, status: input.status, count: input.pharmacyIds.length },
+      });
+    });
+
+    revalidatePath("/", "layout");
+    return ok({ count: input.pharmacyIds.length });
+  } catch (e) {
+    return err(errorMessage(e));
+  }
+}
+
+/**
+ * Drop pharmacies from the network entirely — back to "not listed" (pricing
+ * assumes standard), which is a different fact from an explicit
+ * out-of-network status.
+ */
+export async function removeCarrierPharmacyRows(
+  carrierId: string,
+  planYear: number,
+  pharmacyIds: string[],
+): Promise<ActionResult<{ count: number }>> {
+  try {
+    const profile = await requireRole("admin", "manager");
+    const input = networkBulkSchema.parse({ carrierId, planYear, pharmacyIds });
+
+    const db = getDb();
+    const removed = await db.transaction(async (tx) => {
+      const rows = await tx
+        .delete(carrierPharmacyNetworks)
+        .where(
+          and(
+            eq(carrierPharmacyNetworks.carrierId, input.carrierId),
+            eq(carrierPharmacyNetworks.planYear, input.planYear),
+            inArray(carrierPharmacyNetworks.pharmacyId, input.pharmacyIds),
+          ),
+        )
+        .returning({ id: carrierPharmacyNetworks.id });
+      await writeAudit(tx, {
+        actorId: profile.id,
+        action: "carrier.pharmacy_network_rows_removed",
+        entityType: "carrier",
+        entityId: input.carrierId,
+        meta: { planYear: input.planYear, count: rows.length },
+      });
+      return rows.length;
+    });
+
+    revalidatePath("/", "layout");
+    return ok({ count: removed });
+  } catch (e) {
+    return err(errorMessage(e));
+  }
+}
+
 /** Agent-verified status on the carrier's network — outranks every import. */
 export async function setCarrierPharmacyStatus(
   carrierId: string,

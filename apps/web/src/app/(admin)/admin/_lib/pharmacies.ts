@@ -3,7 +3,7 @@
  * ZIP plus each one's status on the CARRIER's network (+ verifier name).
  * Read-only. Never import from client code.
  */
-import { and, asc, carrierPharmacyNetworks, desc, eq, getDb, inArray, ingestionJobs, pharmacies, profiles, sql } from "@rxsr/db";
+import { and, asc, carrierPharmacyNetworks, desc, eq, getDb, inArray, ingestionJobs, pharmacies, pharmacyBrands, profiles, sql } from "@rxsr/db";
 import type { NetworkStatus } from "@rxsr/core";
 
 export interface PharmacyZipRow {
@@ -104,4 +104,55 @@ export async function getCarrierNetworkCount(
       ),
     );
   return row?.value ?? 0;
+}
+
+export interface CarrierNetworkEditorRow {
+  pharmacyId: string;
+  name: string;
+  brandName: string | null;
+  city: string | null;
+  state: string | null;
+  zip: string | null;
+  status: "preferred" | "standard" | "out_of_network";
+  source: string;
+  verifiedByName: string | null;
+  verifiedAt: string | null;
+}
+
+/** The full (unstaged) network of one carrier for one plan year. */
+export async function getCarrierNetworkRows(
+  carrierId: string,
+  planYear: number,
+): Promise<CarrierNetworkEditorRow[]> {
+  const db = getDb();
+  const rows = await db
+    .select({
+      pharmacyId: carrierPharmacyNetworks.pharmacyId,
+      name: pharmacies.name,
+      brandName: pharmacyBrands.name,
+      city: pharmacies.city,
+      state: pharmacies.state,
+      zip: pharmacies.zip,
+      status: carrierPharmacyNetworks.status,
+      source: carrierPharmacyNetworks.source,
+      verifiedByName: profiles.fullName,
+      verifiedAt: carrierPharmacyNetworks.verifiedAt,
+    })
+    .from(carrierPharmacyNetworks)
+    .innerJoin(pharmacies, eq(carrierPharmacyNetworks.pharmacyId, pharmacies.id))
+    .leftJoin(pharmacyBrands, eq(pharmacies.brandId, pharmacyBrands.id))
+    .leftJoin(profiles, eq(carrierPharmacyNetworks.verifiedBy, profiles.id))
+    .where(
+      and(
+        eq(carrierPharmacyNetworks.carrierId, carrierId),
+        eq(carrierPharmacyNetworks.planYear, planYear),
+        eq(carrierPharmacyNetworks.staged, false),
+      ),
+    )
+    .orderBy(asc(pharmacies.name))
+    .limit(5000);
+  return rows.map((row) => ({
+    ...row,
+    verifiedAt: row.verifiedAt ? row.verifiedAt.toISOString() : null,
+  }));
 }

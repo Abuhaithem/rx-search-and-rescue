@@ -106,6 +106,13 @@ export function CarrierNetworkSection({
           </span>
           <div className="ml-auto flex items-center gap-1.5">
             {networkCount > 0 ? (
+              <Button asChild variant="secondary" size="sm">
+                <a href={`/admin/carriers/${carrierId}/network?year=${year}`}>
+                  Open network →
+                </a>
+              </Button>
+            ) : null}
+            {networkCount > 0 ? (
               <ClearNetworkButton
                 carrierId={carrierId}
                 carrierName={carrierName}
