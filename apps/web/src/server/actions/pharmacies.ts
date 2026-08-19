@@ -213,7 +213,7 @@ export async function uploadPharmacyRoster(
       .string()
       .trim()
       .toUpperCase()
-      .regex(/^[A-Z]{2}$/)
+      .regex(/^[A-Z]{2}$/, "State must be the 2-letter code, e.g. ID")
       .parse(state);
 
     const file = formData.get("pdf") ?? formData.get("file");

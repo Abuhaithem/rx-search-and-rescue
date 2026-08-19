@@ -16,6 +16,10 @@ export function RosterUpload() {
   const [pending, startTransition] = useTransition();
 
   const submit = () => {
+    if (!/^[A-Za-z]{2}$/.test(state.trim())) {
+      toast.error("State must be the 2-letter code, e.g. ID");
+      return;
+    }
     const file = fileRef.current?.files?.[0];
     if (!file) {
       toast.error("Choose the roster PDF first");
