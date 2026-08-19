@@ -136,6 +136,9 @@ function fakeProvider(): { provider: ExtractionProvider; calls: string[] } {
     async extractPharmacyRosterRows() {
       throw new Error("not used");
     },
+    async groupPharmacyBrands() {
+      throw new Error("not used");
+    },
   } satisfies ExtractionProvider;
   return { provider, calls };
 }

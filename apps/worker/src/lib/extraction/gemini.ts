@@ -21,6 +21,7 @@ import {
   formularyPlanNamesSpec,
   pharmacyDirectorySpec,
   pharmacyRosterSpec,
+  brandGroupingSpec,
   drugResolutionSpec,
   pharmacyResolutionSpec,
   rxcExtractionSpec,
@@ -166,6 +167,14 @@ export function createGeminiProvider(deps: GeminiProviderDeps = {}): ExtractionP
     async resolveDrugNames(promptText, options) {
       return run(
         drugResolutionSpec,
+        [{ text: promptText }],
+        options?.model ?? model,
+      );
+    },
+
+    async groupPharmacyBrands(promptText, options) {
+      return run(
+        brandGroupingSpec,
         [{ text: promptText }],
         options?.model ?? model,
       );

@@ -77,5 +77,6 @@ export function limitExtractionProvider(provider: ExtractionProvider): Extractio
     extractPharmacyRosterRows: limited(provider.extractPharmacyRosterRows.bind(provider)),
     resolvePharmacyCandidate: limited(provider.resolvePharmacyCandidate.bind(provider)),
     resolveDrugNames: limited(provider.resolveDrugNames.bind(provider)),
+    groupPharmacyBrands: limited(provider.groupPharmacyBrands.bind(provider)),
   };
 }

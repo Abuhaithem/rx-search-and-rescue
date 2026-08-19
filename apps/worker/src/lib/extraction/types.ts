@@ -5,6 +5,7 @@
  */
 import type { FormularyPage, RxcExtraction } from "@rxsr/core/intake";
 import type {
+  BrandGroupingExtraction,
   DrugResolutionExtraction,
   FormularyLegendExtraction,
   PharmacyRosterExtraction,
@@ -80,6 +81,11 @@ export interface ExtractionProvider {
     rosterText: string,
     options?: ExtractionCallOptions,
   ): Promise<PharmacyRosterExtraction>;
+  /** Group brand-name variants of the same chain (brand-tidy job). */
+  groupPharmacyBrands(
+    promptText: string,
+    options?: ExtractionCallOptions,
+  ): Promise<BrandGroupingExtraction>;
 }
 
 export type {

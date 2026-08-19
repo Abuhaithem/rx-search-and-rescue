@@ -56,6 +56,14 @@ async function main() {
       { connection, concurrency: INGEST_CONCURRENCY },
     ),
     new Worker(
+      QUEUE_NAMES.pharmacyBrandTidy,
+      async (job) => {
+        const { runPharmacyBrandTidy } = await import("./jobs/pharmacy-brand-tidy");
+        return runPharmacyBrandTidy(job.data);
+      },
+      { connection, concurrency: 1 },
+    ),
+    new Worker(
       QUEUE_NAMES.reportPdf,
       async (job) => {
         const { runReportPdf } = await import("./jobs/report-pdf");

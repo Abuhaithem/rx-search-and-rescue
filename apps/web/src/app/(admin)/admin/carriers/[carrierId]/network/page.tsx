@@ -27,9 +27,9 @@ export default async function CarrierNetworkPage({
   return (
     <div className="space-y-6">
       <PageHeader
-        title={`${carrier.name} — Pharmacy Network ${year}`}
-        description="One network per carrier, shared by every plan. Statuses you set here are agent-verified and outrank every import."
-        backHref={`/admin/carriers?year=${year}`}
+        title={`${carrier.name} — Pharmacy network ${year}`}
+        description="Every pharmacy on this carrier's network for the year. Status changes here are agent-verified — they outrank every import, forever."
+        backHref={`/admin/carriers?year=${year}&carrier=${carrierId}`}
       />
       <NetworkEditor carrierId={carrierId} planYear={year} rows={rows} />
     </div>

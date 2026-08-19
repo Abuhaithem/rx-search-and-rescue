@@ -101,6 +101,18 @@ export const drugResolutionSchema = z.object({
 });
 export type DrugResolutionExtraction = z.infer<typeof drugResolutionSchema>;
 
+export const brandGroupingSchema = z.object({
+  groups: z.array(
+    z.object({
+      /** Customer-facing chain name; must match one of the member names. */
+      canonicalName: z.string().min(1),
+      /** Indexes into the provided brand list; only groups of 2+ appear. */
+      memberIndexes: z.array(z.number().int().min(0)).min(2),
+    }),
+  ),
+});
+export type BrandGroupingExtraction = z.infer<typeof brandGroupingSchema>;
+
 export const pharmacyResolutionSchema = z.object({
   /** Index into the provided candidate list; null = none is the pharmacy. */
   matchedIndex: z.number().int().min(0).nullable(),
@@ -426,6 +438,30 @@ const DRUG_RESOLUTION_JSON_SCHEMA: JsonObjectSchema = {
   },
 };
 
+const BRAND_GROUPING_JSON_SCHEMA: JsonObjectSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["groups"],
+  properties: {
+    groups: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["canonicalName", "memberIndexes"],
+        properties: {
+          canonicalName: { type: "string", minLength: 1 },
+          memberIndexes: {
+            type: "array",
+            minItems: 2,
+            items: { type: "integer", minimum: 0 },
+          },
+        },
+      },
+    },
+  },
+};
+
 const PHARMACY_RESOLUTION_JSON_SCHEMA: JsonObjectSchema = {
   type: "object",
   additionalProperties: false,
@@ -647,6 +683,24 @@ Rules:
 - You resolve NAMES only. Never infer, alter, or comment on coverage status.`,
   jsonSchema: DRUG_RESOLUTION_JSON_SCHEMA,
   parse: (input) => drugResolutionSchema.parse(input),
+};
+
+/**
+ * Brand-tidy judgment: which pharmacy brand names refer to the SAME retail
+ * chain ("Sav-On Pharmacy" / "Albertsons Sav-On Pharmacy"). Merging only
+ * changes display grouping — never a pharmacy's identity or network rows —
+ * so a wrong merge is recoverable by editing brands in the admin table.
+ */
+export const brandGroupingSpec: ExtractionSpec<BrandGroupingExtraction> = {
+  toolName: "record_brand_groups",
+  description: "Record which pharmacy brand names belong to the same chain.",
+  systemPrompt: `You are given a numbered list of pharmacy brand names from one US state. Group ONLY names that clearly refer to the same retail pharmacy chain or family — spelling variants, with/without a parent-company prefix, abbreviations ("Sav-On Pharmacy" and "Albertsons Sav-On Pharmacy"; "Fred Meyer Pharmacy" and "Fred Meyer (Kroger) Pharmacy").
+Rules:
+- A group needs at least 2 members. Names with no variant are simply omitted.
+- canonicalName must be EXACTLY one of the member names — pick the clearest customer-facing one.
+- NEVER group different chains, hospitals, or independents just because the names look similar ("Medicine Man Pharmacy" vs "Medicap Pharmacy" are different chains). When unsure, do not group.`,
+  jsonSchema: BRAND_GROUPING_JSON_SCHEMA,
+  parse: (input) => brandGroupingSchema.parse(input),
 };
 
 /**

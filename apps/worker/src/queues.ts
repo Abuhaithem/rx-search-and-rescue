@@ -8,6 +8,7 @@ export const QUEUE_NAMES = {
   rxcIntake: "rxc-intake",
   pharmacyDirectory: "pharmacy-directory",
   pharmacyRoster: "pharmacy-roster",
+  pharmacyBrandTidy: "pharmacy-brand-tidy",
   xlsxImport: "xlsx-import",
   sobIngest: "sob-ingest",
   reportPdf: "report-pdf",
@@ -49,6 +50,10 @@ export interface PharmacyRosterJob {
   storagePath: string;
   /** Two-letter state the roster covers, e.g. "ID". */
   state: string;
+}
+
+export interface PharmacyBrandTidyJob {
+  ingestionJobId: string;
 }
 
 export interface SobIngestJob {

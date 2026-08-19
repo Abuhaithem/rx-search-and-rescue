@@ -31,6 +31,7 @@ export function PharmacyCards({
   const router = useRouter();
   const [selected, setSelected] = useState<string[]>(choices.selectedIds);
   const [filter, setFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "in_network" | "preferred">("all");
   const [showAll, setShowAll] = useState(false);
   const [pending, startTransition] = useTransition();
 
@@ -38,15 +39,25 @@ export function PharmacyCards({
   // "Show all" unless a filter is active (searching means browsing).
   const { visible, hiddenCount } = useMemo(() => {
     const q = filter.trim().toLowerCase();
-    const matches =
-      q === ""
-        ? choices.options
-        : choices.options.filter(
-            (o) =>
-              o.name.toLowerCase().includes(q) ||
-              (o.city ?? "").toLowerCase().includes(q) ||
-              (o.zip ?? "").includes(q),
-          );
+    // "In network" / "Preferred" mean: that standing on EVERY compared plan —
+    // the pharmacies a client can actually rely on across the comparison.
+    const passesStatus = (o: (typeof choices.options)[number]): boolean => {
+      if (statusFilter === "all" || choices.plans.length === 0) return true;
+      return choices.plans.every((plan) => {
+        const status = o.statusByPlan[plan.id] ?? null;
+        return statusFilter === "preferred"
+          ? status === "preferred"
+          : status === "preferred" || status === "standard";
+      });
+    };
+    const matches = choices.options.filter(
+      (o) =>
+        passesStatus(o) &&
+        (q === "" ||
+          o.name.toLowerCase().includes(q) ||
+          (o.city ?? "").toLowerCase().includes(q) ||
+          (o.zip ?? "").includes(q)),
+    );
     // Selected pin first; then the client's own ZIP; then the rest of the state.
     const unselected = matches.filter((o) => !selected.includes(o.id));
     const ordered = [
@@ -54,14 +65,14 @@ export function PharmacyCards({
       ...unselected.filter((o) => o.inClientZip),
       ...unselected.filter((o) => !o.inClientZip),
     ];
-    if (q !== "" || showAll) return { visible: ordered, hiddenCount: 0 };
+    if (q !== "" || statusFilter !== "all" || showAll) return { visible: ordered, hiddenCount: 0 };
     const selectedCount = ordered.filter((o) => selected.includes(o.id)).length;
     const limit = Math.max(selectedCount + COLLAPSED_LIMIT, COLLAPSED_LIMIT);
     return {
       visible: ordered.slice(0, limit),
       hiddenCount: Math.max(0, ordered.length - limit),
     };
-  }, [choices.options, filter, selected, showAll]);
+  }, [choices.options, choices.plans, filter, statusFilter, selected, showAll]);
 
   const toggle = (pharmacyId: string) => {
     if (choices.locked) return;
@@ -96,24 +107,58 @@ export function PharmacyCards({
             pharmacy&apos;s standing on every compared plan.
           </p>
         </div>
-        {choices.options.length > COLLAPSED_LIMIT ? (
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-steel" />
-            <Input
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              placeholder={`Search all ${choices.options.length} pharmacies…`}
-              className="w-64 pl-8"
-            />
-          </div>
-        ) : null}
+        <div className="flex flex-wrap items-center gap-2">
+          {choices.plans.length > 0 ? (
+            <div className="flex gap-1">
+              {(
+                [
+                  ["all", "All"],
+                  ["in_network", "In network"],
+                  ["preferred", "Preferred"],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  title={
+                    value === "all"
+                      ? undefined
+                      : `${label} on every compared plan`
+                  }
+                  onClick={() => setStatusFilter(value)}
+                  className={cn(
+                    "rounded-chip px-2.5 py-1 font-mono text-[11px] font-semibold uppercase tracking-[0.08em] transition-colors",
+                    statusFilter === value
+                      ? "bg-harbor text-white"
+                      : "bg-fog text-steel hover:bg-mist/60",
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {choices.options.length > COLLAPSED_LIMIT ? (
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-steel" />
+              <Input
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                placeholder={`Search all ${choices.options.length} pharmacies…`}
+                className="w-64 pl-8"
+              />
+            </div>
+          ) : null}
+        </div>
       </div>
 
       {visible.length === 0 ? (
         <p className="rounded-card border border-dashed border-mist bg-white px-6 py-8 text-center text-sm text-steel">
           {choices.options.length === 0
             ? "No pharmacies on file yet — they arrive from carrier directory uploads and client intakes."
-            : `No pharmacies match “${filter.trim()}”.`}
+            : statusFilter !== "all" && filter.trim() === ""
+              ? `No pharmacy is ${statusFilter === "preferred" ? "preferred" : "in network"} on every compared plan.`
+              : `No pharmacies match “${filter.trim()}”.`}
         </p>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">

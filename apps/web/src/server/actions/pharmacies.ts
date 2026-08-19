@@ -403,3 +403,27 @@ export async function deleteAllPharmacies(): Promise<
     return err(errorMessage(e));
   }
 }
+
+/** Queue the AI brand-tidy pass (worker): merge same-chain brand variants. */
+export async function tidyPharmacyBrands(): Promise<
+  ActionResult<{ ingestionJobId: string }>
+> {
+  try {
+    const profile = await requireRole("admin", "manager");
+    const { ingestionJobId } = await enqueueIngestionJob({
+      kind: "pharmacy_brand_tidy",
+      queue: QUEUE_NAMES.pharmacyBrandTidy,
+      payload: (jobId) => ({ ingestionJobId: jobId }),
+    });
+    await writeAudit(getDb(), {
+      actorId: profile.id,
+      action: "pharmacy.brand_tidy_enqueued",
+      entityType: "pharmacy_list",
+      meta: { ingestionJobId },
+    });
+    revalidatePath("/", "layout");
+    return ok({ ingestionJobId });
+  } catch (e) {
+    return err(errorMessage(e));
+  }
+}

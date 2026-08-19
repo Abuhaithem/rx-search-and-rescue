@@ -14,6 +14,7 @@ import {
   formularyPlanNamesSpec,
   pharmacyDirectorySpec,
   pharmacyRosterSpec,
+  brandGroupingSpec,
   drugResolutionSpec,
   pharmacyResolutionSpec,
   quantityLimitPageSpec,
@@ -207,6 +208,14 @@ export function createOpenAIProvider(deps: OpenAIProviderDeps = {}): ExtractionP
     async resolveDrugNames(promptText, options) {
       return run(
         drugResolutionSpec,
+        [{ type: "input_text", text: promptText }],
+        options?.model ?? model,
+      );
+    },
+
+    async groupPharmacyBrands(promptText, options) {
+      return run(
+        brandGroupingSpec,
         [{ type: "input_text", text: promptText }],
         options?.model ?? model,
       );

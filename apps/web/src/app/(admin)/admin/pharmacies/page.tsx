@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/domain/page-header";
 import { RefreshPoller } from "../formularies/_components/refresh-poller";
 import { PastePharmacyList } from "./_components/paste-pharmacy-list";
+import { TidyBrandsButton } from "./_components/tidy-brands-button";
 import { PharmacyTable, type PharmacyTableRow } from "./_components/pharmacy-table";
 import { RosterUpload } from "./_components/roster-upload";
 
@@ -20,17 +21,23 @@ export default async function PharmaciesAdminPage() {
     .groupBy(pharmacies.state)
     .orderBy(sql`count(*) desc`);
 
-  const [rosterJob] = await db
-    .select({
-      status: ingestionJobs.status,
-      message: sql<string | null>`${ingestionJobs.progress} ->> 'message'`,
-      error: ingestionJobs.error,
-    })
-    .from(ingestionJobs)
-    .where(eq(ingestionJobs.kind, "pharmacy_roster"))
-    .orderBy(desc(ingestionJobs.createdAt))
-    .limit(1);
+  const latestJob = (kind: string) =>
+    db
+      .select({
+        status: ingestionJobs.status,
+        message: sql<string | null>`${ingestionJobs.progress} ->> 'message'`,
+        error: ingestionJobs.error,
+      })
+      .from(ingestionJobs)
+      .where(eq(ingestionJobs.kind, kind))
+      .orderBy(desc(ingestionJobs.createdAt))
+      .limit(1);
+  const [[rosterJob], [tidyJob]] = await Promise.all([
+    latestJob("pharmacy_roster"),
+    latestJob("pharmacy_brand_tidy"),
+  ]);
   const rosterRunning = rosterJob?.status === "queued" || rosterJob?.status === "running";
+  const tidyRunning = tidyJob?.status === "queued" || tidyJob?.status === "running";
 
   const listRows = await db.query.pharmacies.findMany({
     columns: {
@@ -66,7 +73,7 @@ export default async function PharmaciesAdminPage() {
 
       <Card>
         <CardContent className="space-y-3 p-6">
-          <RefreshPoller active={rosterRunning} />
+          <RefreshPoller active={rosterRunning || tidyRunning} />
           <RosterUpload />
           {rosterJob ? (
             <p
@@ -91,6 +98,26 @@ export default async function PharmaciesAdminPage() {
           <PastePharmacyList />
         </CardContent>
       </Card>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <TidyBrandsButton />
+        {tidyJob ? (
+          <p
+            className={`text-sm ${tidyJob.status === "failed" ? "text-notcovered" : "text-steel"}`}
+          >
+            {tidyJob.status === "failed"
+              ? `Brand tidy failed: ${tidyJob.error ?? "unknown error"}`
+              : tidyRunning
+                ? `${tidyJob.message ?? "Tidying brands…"} — refreshing…`
+                : (tidyJob.message ?? "Last brand tidy finished.")}
+          </p>
+        ) : (
+          <p className="text-sm text-steel">
+            Merges brand-name variants of the same chain (Sav-On / Albertsons Sav-On) so the
+            comparison shows one card per chain. Safe to re-run anytime.
+          </p>
+        )}
+      </div>
 
       <PharmacyTable rows={tableRows} stateCounts={counts} />
     </div>

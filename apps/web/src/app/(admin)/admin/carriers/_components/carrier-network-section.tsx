@@ -108,7 +108,7 @@ export function CarrierNetworkSection({
             {networkCount > 0 ? (
               <Button asChild variant="secondary" size="sm">
                 <a href={`/admin/carriers/${carrierId}/network?year=${year}`}>
-                  Open network →
+                  Edit network →
                 </a>
               </Button>
             ) : null}

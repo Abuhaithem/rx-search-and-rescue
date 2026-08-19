@@ -16,6 +16,7 @@ import {
   formularyPlanNamesSpec,
   pharmacyDirectorySpec,
   pharmacyRosterSpec,
+  brandGroupingSpec,
   drugResolutionSpec,
   pharmacyResolutionSpec,
   quantityLimitPageSpec,
@@ -198,6 +199,15 @@ export function createAnthropicProvider(
     async resolveDrugNames(promptText, options) {
       return run(
         drugResolutionSpec,
+        [{ type: "text", text: promptText }],
+        options?.model ?? model,
+        false,
+      );
+    },
+
+    async groupPharmacyBrands(promptText, options) {
+      return run(
+        brandGroupingSpec,
         [{ type: "text", text: promptText }],
         options?.model ?? model,
         false,
