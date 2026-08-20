@@ -32,6 +32,16 @@ export interface ReportPlanBenefits {
   channelHeaders: string[];
   channels: PharmacyChannel[];
   tierRows: ReportTierRow[];
+  /**
+   * D-SNP: CMS Extra Help cost sharing REPLACES the tier table — copays are
+   * set by the member's Medicaid/LIS level, not plan tiers.
+   */
+  lisCostSharing?: {
+    /** e.g. "Full Medicaid, income ≤100% FPL"; null = level not on file. */
+    levelLabel: string | null;
+    genericCopay: string; // "$1.60" or "—"
+    brandCopay: string; // "$4.90" or "—"
+  } | null;
 }
 
 /** One priced cell of the cost matrix — a pharmacy row × plan column. */

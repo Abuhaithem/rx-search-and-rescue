@@ -184,6 +184,46 @@ function gridTable(model: ReportModel): Table {
 }
 
 function benefitsTable(benefits: ReportPlanBenefits): Table {
+  // D-SNP: Extra Help (LIS) cost sharing replaces the tier grid — copays
+  // come from the member's Medicaid/LIS level, not plan tiers.
+  if (benefits.lisCostSharing) {
+    const lis = benefits.lisCostSharing;
+    return new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      borders: TABLE_BORDERS,
+      rows: [
+        new TableRow({
+          tableHeader: true,
+          children: [headerCell(`${benefits.carrierName} — ${benefits.planName}`, 2)],
+        }),
+        new TableRow({
+          children: [labelCell("Plan Premium"), dataCell(benefits.premium)],
+        }),
+        new TableRow({
+          children: [labelCell("RX Deductible"), dataCell(benefits.rxDeductible)],
+        }),
+        new TableRow({
+          children: [subheadCell("Extra Help (LIS) cost sharing"), subheadCell("Per fill")],
+        }),
+        new TableRow({
+          children: [labelCell("Generic drugs"), dataCell(lis.genericCopay)],
+        }),
+        new TableRow({
+          children: [labelCell("Brand drugs"), dataCell(lis.brandCopay)],
+        }),
+        new TableRow({
+          children: [
+            labelCell("Priced at"),
+            dataCell(
+              lis.levelLabel ??
+                "Extra Help level not on file — copays depend on the member's Medicaid/LIS status",
+            ),
+          ],
+        }),
+      ],
+    });
+  }
+
   const valueColumns = Math.max(benefits.channelHeaders.length, 1);
   const rows = [
     new TableRow({

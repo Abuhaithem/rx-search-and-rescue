@@ -174,3 +174,55 @@ describe("renderDocx", () => {
     expect(xml.toUpperCase()).not.toContain("F97316");
   });
 });
+
+describe("D-SNP (LIS) benefits rendering", () => {
+  it("renders the Extra Help table with the priced-at level instead of tiers", async () => {
+    const model: ReportModel = {
+      ...fixtureModel,
+      benefits: [
+        {
+          planName: "Dual Complete ID-Q1 (HMO-POS D-SNP)",
+          carrierName: "UnitedHealthcare",
+          premium: "$0.00",
+          rxDeductible: "$0.00",
+          channelHeaders: [],
+          channels: [],
+          tierRows: [],
+          lisCostSharing: {
+            levelLabel: "Full Medicaid, income ≤100% FPL",
+            genericCopay: "$1.60",
+            brandCopay: "$4.90",
+          },
+        },
+      ],
+    };
+    const buffer = await renderDocx(model);
+    const xml = extractZipEntry(Buffer.from(buffer), "word/document.xml");
+    expect(xml).toContain("Extra Help (LIS) cost sharing");
+    expect(xml).toContain("$1.60");
+    expect(xml).toContain("$4.90");
+    expect(xml).toContain("Full Medicaid, income ≤100% FPL");
+    expect(xml).not.toContain(">Tier<");
+  });
+
+  it("states plainly when the Extra Help level is not on file", async () => {
+    const model: ReportModel = {
+      ...fixtureModel,
+      benefits: [
+        {
+          planName: "Dual Complete ID-Y1 (HMO-POS D-SNP)",
+          carrierName: "UnitedHealthcare",
+          premium: "$0.00",
+          rxDeductible: "—",
+          channelHeaders: [],
+          channels: [],
+          tierRows: [],
+          lisCostSharing: { levelLabel: null, genericCopay: "—", brandCopay: "—" },
+        },
+      ],
+    };
+    const buffer = await renderDocx(model);
+    const xml = extractZipEntry(Buffer.from(buffer), "word/document.xml");
+    expect(xml).toContain("Extra Help level not on file");
+  });
+});

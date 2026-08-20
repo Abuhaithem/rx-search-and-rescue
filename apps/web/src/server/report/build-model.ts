@@ -10,6 +10,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { analyses, formularyEntries, getDb, planPharmacyNetworks, profiles } from "@rxsr/db";
 import {
   CHANNEL_LABELS,
+  LIS_CATEGORY_LABELS,
   lisCopayCents,
   type Cents,
   type NetworkStatus,
@@ -295,16 +296,32 @@ export async function buildReportModel(analysisId: string): Promise<ReportModel 
     orderedPlanIds,
   );
 
-  const benefits = orderedPlans.map((ap) =>
-    buildPlanBenefits({
+  const benefits = orderedPlans.map((ap) => {
+    const base = buildPlanBenefits({
       planName: ap.plan.name,
       carrierName: ap.plan.carrier.name,
       premiumCents: ap.plan.premiumCents,
       rxDeductibleCents: ap.plan.rxDeductibleCents,
       tierCosts: (tierCostsByPlan.get(ap.planId) ?? []).map((tc) => ({ ...tc })),
       tierLabels: ap.plan.tierLabels,
-    }),
-  );
+    });
+    if (!ap.plan.lisCostSharing) return base;
+    // D-SNP: state the priced-at Extra Help level and its copays in place of
+    // the tier grid; LIS deductible is $0 by the CMS schedule.
+    const generic =
+      lisCategory != null ? lisCopayCents(analysis.planYear, lisCategory, false) : null;
+    const brand =
+      lisCategory != null ? lisCopayCents(analysis.planYear, lisCategory, true) : null;
+    return {
+      ...base,
+      rxDeductible: lisCategory != null ? centsDisplay(0) : base.rxDeductible,
+      lisCostSharing: {
+        levelLabel: lisCategory != null ? LIS_CATEGORY_LABELS[lisCategory] : null,
+        genericCopay: generic != null ? centsDisplay(generic) : "—",
+        brandCopay: brand != null ? centsDisplay(brand) : "—",
+      },
+    };
+  });
 
   const pharmacyNotes = primaryPharmacy
     ? orderedPlans
